@@ -1,0 +1,56 @@
+{
+  "name": "opencode-codex-usage-plugin",
+  "version": "0.0.1",
+  "description": "OpenCode TUI plugin that shows Codex usage and reset times.",
+  "keywords": [
+    "codex",
+    "opencode",
+    "opencode-plugin",
+    "tui",
+    "usage"
+  ],
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "import": "./dist/tui.js",
+      "default": "./dist/tui.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm clean && tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "format": "oxfmt . --write",
+    "format:check": "oxfmt . --check",
+    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build",
+    "prepare": "effect-language-service patch",
+    "test": "vitest run src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.17.9",
+    "@opentui/solid": "^0.4.1",
+    "effect": "4.0.0-beta.85",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@effect/language-service": "0.86.2",
+    "@effect/vitest": "4.0.0-beta.85",
+    "@types/node": "^24.10.1",
+    "effect-solutions": "^0.5.3",
+    "oxfmt": "^0.56.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  },
+  "engines": {
+    "opencode": ">=1.17.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

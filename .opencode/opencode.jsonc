@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect-smol",
+      "description": "Use for Effect v4 and effect-smol implementation details",
+    },
+    "opencode": {
+      "repository": "anomalyco/opencode",
+      "description": "Use for OpenCode implementation details, Effect patterns, plugin APIs and other documentation related to OpenCode",
+    },
+    "logs": {
+      "path": "~/.local/share/opencode/log/opencode.log",
+      "description": "Use for OpenCode user-facing docs, especially plugins, references, and config behavior",
+    },
+  },
+}
