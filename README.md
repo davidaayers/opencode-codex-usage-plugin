@@ -1,6 +1,14 @@
 # opencode-codex-usage-plugin
 
-OpenCode TUI plugin that shows Codex usage and reset times in the sidebar.
+<p align="center">
+  Show your Codex usage and reset times directly in the OpenCode sidebar.
+</p>
+
+<div align="center">
+  <img src="./assets/demo.gif" alt="opencode-codex-usage-plugin demo" width="900">
+</div>
+
+This plugin reads Codex usage from Codex App or the Codex CLI and renders the current 5-hour and weekly limits inside OpenCode, so you can keep an eye on quota without leaving the TUI.
 
 ## Install
 
