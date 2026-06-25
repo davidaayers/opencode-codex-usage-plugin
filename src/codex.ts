@@ -147,7 +147,6 @@ export const layer = (options: Options = {}) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const logger = yield* Logger.Service
       const context = yield* Effect.context()
       const runDetached = Effect.runForkWith(context)
       const startup = yield* Semaphore.make(1)
@@ -184,7 +183,7 @@ export const layer = (options: Options = {}) =>
       const failTransport = (target: TransportProcess, error: TransportError) =>
         Effect.gen(function* () {
           if (transport?.process !== target) return
-          yield* logger.error("server.error", { error: error.message })
+          yield* Effect.logError("server.error", { error: error.message })
           yield* rejectAll(error)
           yield* cleanupTransport(target)
         })
@@ -203,12 +202,12 @@ export const layer = (options: Options = {}) =>
       })
 
       const dispose = Effect.fn("CodexService.dispose")(function* () {
-        yield* logger.debug("client.dispose", { pending: pending.size, running: transport !== undefined })
+        yield* Effect.logDebug("client.dispose", { pending: pending.size, running: transport !== undefined })
         yield* rejectAll(new TransportError({ message: "Codex app-server stopped before pending requests completed." }))
         yield* cleanupTransport()
       })
 
-      yield* logger.debug("client.created", { command, socketPath, timeoutMs })
+      yield* Effect.logDebug("client.created", { command, socketPath, timeoutMs })
       yield* Effect.addFinalizer(() => dispose())
 
       const spawnCodex = Effect.fn("CodexService.spawn")(function* (
@@ -221,7 +220,7 @@ export const layer = (options: Options = {}) =>
           try: () => spawnProcess(command, [...args], spawnOptions),
           catch: (cause) => new ServerStartError({ message: "Failed to start Codex app-server.", cause }),
         })
-        yield* logger.debug(message, { command, args })
+        yield* Effect.logDebug(message, { command, args })
         return child
       })
 
@@ -268,10 +267,10 @@ export const layer = (options: Options = {}) =>
 
       const ensureSharedServer = Effect.fn("CodexService.ensureSharedServer")(function* () {
         if (yield* canConnectToSocket(socketPath)) {
-          yield* logger.debug("server.socket.reuse", { socketPath })
+          yield* Effect.logDebug("server.socket.reuse", { socketPath })
           return
         }
-        yield* removeStaleSocket(socketPath, logger)
+        yield* removeStaleSocket(socketPath)
         yield* startSharedServer()
       })
 
@@ -304,7 +303,7 @@ export const layer = (options: Options = {}) =>
             Effect.gen(function* () {
               if (transport?.process !== child) return
               const message = `Codex app-server exited with ${signal ?? code ?? "unknown status"}.`
-              yield* logger.warn("server.exit", { code, signal })
+              yield* Effect.logWarning("server.exit", { code, signal })
               yield* rejectAll(new TransportError({ message }))
               yield* cleanupTransport(child, false)
             }),
@@ -318,7 +317,7 @@ export const layer = (options: Options = {}) =>
         child.stderr.on("data", (chunk: Buffer | string) => {
           if (transport?.process !== child) return
           const message = chunk.toString().trim()
-          if (message) runDetached(logger.warn("server.stderr", { message: message.slice(0, 500) }))
+          if (message) runDetached(Effect.logWarning("server.stderr", { message: message.slice(0, 500) }))
         })
         transport = { process: child, lines }
       })
@@ -329,12 +328,12 @@ export const layer = (options: Options = {}) =>
 
         const id = `opencode-codex-usage-plugin-${nextId++}`
         const payload = { id, method, params }
-        yield* logger.debug("protocol.send", { id, method })
+        yield* Effect.logDebug("protocol.send", { id, method })
 
         return yield* Effect.callback<unknown, Error>((resume) => {
           const timer = setTimeout(() => {
             pending.delete(id)
-            runDetached(logger.warn("protocol.timeout", { id, method, timeoutMs }))
+            runDetached(Effect.logWarning("protocol.timeout", { id, method, timeoutMs }))
             resume(
               Effect.fail(
                 new RequestTimeoutError({
@@ -370,7 +369,7 @@ export const layer = (options: Options = {}) =>
 
       const start = Effect.fn("CodexService.start")(function* () {
         if (!command) {
-          yield* logger.warn("server.command.missing")
+          yield* Effect.logWarning("server.command.missing")
           return yield* new CommandMissingError({ message: MISSING_CODEX_MESSAGE })
         }
 
@@ -381,7 +380,7 @@ export const layer = (options: Options = {}) =>
           Effect.catch((error) =>
             Effect.gen(function* () {
               // Fallback to stdio if the proxy fails
-              yield* logger.debug("server.shared.fallback_stdio", { command, socketPath, error: error.message })
+              yield* Effect.logDebug("server.shared.fallback_stdio", { command, socketPath, error: error.message })
               yield* startTransport(["app-server", "--listen", "stdio://"], "server.stdio.spawn")
             }),
           ),
@@ -402,7 +401,7 @@ export const layer = (options: Options = {}) =>
       })
 
       const readUsage = Effect.fn("CodexService.readUsage")(function* () {
-        yield* logger.debug("usage.read.start")
+        yield* Effect.logDebug("usage.read.start")
         yield* startup.withPermit(
           Effect.gen(function* () {
             if (initialized && transport) return
@@ -417,7 +416,7 @@ export const layer = (options: Options = {}) =>
           ),
         )
         const usage = Usage.mapRateLimitsToUsage(response)
-        yield* logger.debug("usage.read.success", {
+        yield* Effect.logDebug("usage.read.success", {
           fiveHour: usage.fiveHour?.usedPercent ?? null,
           weekly: usage.weekly?.usedPercent ?? null,
         })
@@ -430,22 +429,22 @@ export const layer = (options: Options = {}) =>
 
         const message = yield* parseProtocolMessage(trimmed).pipe(
           Effect.catchTag("CodexService.ProtocolParseError", (error) =>
-            logger.warn("protocol.parse_error", { line: error.line, error: error.message }).pipe(Effect.asVoid),
+            Effect.logWarning("protocol.parse_error", { line: error.line, error: error.message }).pipe(Effect.asVoid),
           ),
         )
         if (!message) return
         if (transport?.process !== source) return
 
         if (message.id === undefined) {
-          yield* logger.debug("protocol.notification", { method: message.method })
+          yield* Effect.logDebug("protocol.notification", { method: message.method })
           return
         }
 
         if (message.method !== undefined && !hasOwn(message, "result") && !hasOwn(message, "error")) {
-          yield* logger.debug("protocol.server_request", { id: message.id, method: message.method })
+          yield* Effect.logDebug("protocol.server_request", { id: message.id, method: message.method })
           if (message.method === "currentTime/read") {
             const unixTimestampMs = yield* Clock.currentTimeMillis
-            yield* logger.debug("protocol.server_response", {
+            yield* Effect.logDebug("protocol.server_response", {
               id: message.id,
               method: message.method,
               action: "current_time",
@@ -456,7 +455,7 @@ export const layer = (options: Options = {}) =>
             return
           }
 
-          yield* logger.warn("protocol.server_response", {
+          yield* Effect.logWarning("protocol.server_response", {
             id: message.id,
             method: message.method,
             action: "unsupported",
@@ -472,13 +471,16 @@ export const layer = (options: Options = {}) =>
 
         const request = pending.get(message.id)
         if (!request) {
-          yield* logger.warn("protocol.unmatched_response", { id: message.id, hasError: hasOwn(message, "error") })
+          yield* Effect.logWarning("protocol.unmatched_response", {
+            id: message.id,
+            hasError: hasOwn(message, "error"),
+          })
           return
         }
 
         pending.delete(message.id)
         clearTimeout(request.timer)
-        yield* logger.debug("protocol.response", { id: message.id, hasError: hasOwn(message, "error") })
+        yield* Effect.logDebug("protocol.response", { id: message.id, hasError: hasOwn(message, "error") })
 
         if (hasOwn(message, "error")) {
           request.resume(Effect.fail(new ProtocolError({ message: formatProtocolError(message.error) })))
@@ -495,7 +497,7 @@ export const layer = (options: Options = {}) =>
     }),
   )
 
-export const defaultLayer = layer().pipe(Layer.provide(Logger.noopLayer))
+export const defaultLayer = layer().pipe(Layer.provideMerge(Logger.noopLayer))
 
 export function resolveCodexCommand(
   commandExists: CommandExists = commandAvailable,
@@ -575,16 +577,16 @@ const waitForSocket = Effect.fn("CodexService.waitForSocket")(function* (socketP
   return yield* new ServerStartError({ message: `Timed out waiting for Codex app-server socket at ${socketPath}.` })
 })
 
-function removeStaleSocket(socketPath: string, logger: Logger.Interface): Effect.Effect<void> {
+function removeStaleSocket(socketPath: string): Effect.Effect<void> {
   return Effect.try({
     try: () => unlinkSync(socketPath),
     catch: (cause) => new ServerStartError({ message: "Failed to remove stale Codex app-server socket.", cause }),
   }).pipe(
-    Effect.tap(() => logger.debug("server.socket.unlink_stale", { socketPath })),
+    Effect.tap(() => Effect.logDebug("server.socket.unlink_stale", { socketPath })),
     Effect.catch((error) =>
       isNodeError(error.cause) && error.cause.code === "ENOENT"
         ? Effect.void
-        : logger.error("server.socket.unlink_stale_error", { socketPath, error: error.message }),
+        : Effect.logError("server.socket.unlink_stale_error", { socketPath, error: error.message }),
     ),
   )
 }

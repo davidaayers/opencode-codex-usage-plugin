@@ -1,53 +1,35 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { Context, Effect, Layer } from "effect"
+import { Array, Layer, Logger as EffectLogger, Predicate, References, type LogLevel } from "effect"
 
 type Level = "debug" | "info" | "warn" | "error"
 
-export interface Interface {
-  readonly debug: (message: string, extra?: Record<string, unknown>) => Effect.Effect<void>
-  readonly info: (message: string, extra?: Record<string, unknown>) => Effect.Effect<void>
-  readonly warn: (message: string, extra?: Record<string, unknown>) => Effect.Effect<void>
-  readonly error: (message: string, extra?: Record<string, unknown>) => Effect.Effect<void>
+// Mapping from Effect log levels to OpenCode log levels
+const levels: Partial<Record<LogLevel.LogLevel, Level>> = {
+  Debug: "debug",
+  Trace: "debug",
+  Warn: "warn",
+  Error: "error",
+  Fatal: "error",
 }
-
-export class Service extends Context.Service<Service, Interface>()("Logger") {}
 
 export const layer = (api: TuiPluginApi) => {
-  const write = Effect.fn("Logger.write")(function* (
-    level: Level,
-    message: string,
-    extra: Record<string, unknown> = {},
-  ) {
-    yield* Effect.tryPromise(() =>
-      api.client.app.log({
+  const logger = EffectLogger.make((options) => {
+    const [message, extra] = Array.ensure(options.message)
+
+    void api.client.app
+      .log({
         directory: api.state.path.directory,
         service: "opencode-codex-usage-plugin",
-        level,
-        message,
-        extra,
-      }),
-    ).pipe(Effect.catch(() => Effect.void))
+        level: levels[options.logLevel] ?? "info",
+        message: String(message),
+        extra: Predicate.isObject(extra) ? extra : {},
+      })
+      .catch(() => undefined)
   })
 
-  return Layer.succeed(
-    Service,
-    Service.of({
-      debug: (message, extra) => write("debug", message, extra),
-      info: (message, extra) => write("info", message, extra),
-      warn: (message, extra) => write("warn", message, extra),
-      error: (message, extra) => write("error", message, extra),
-    }),
-  )
+  return EffectLogger.layer([logger]).pipe(Layer.merge(Layer.succeed(References.MinimumLogLevel, "Debug")))
 }
 
-export const noopLayer = Layer.succeed(
-  Service,
-  Service.of({
-    debug: () => Effect.void,
-    info: () => Effect.void,
-    warn: () => Effect.void,
-    error: () => Effect.void,
-  }),
-)
+export const noopLayer = EffectLogger.layer([])
 
 export * as Logger from "./logger.js"

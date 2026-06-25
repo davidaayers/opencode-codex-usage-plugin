@@ -198,25 +198,11 @@ function createRuntime(api: TuiPluginApi) {
 }
 
 function debug(runtime: Runtime, message: string, extra: Record<string, unknown> = {}) {
-  void runtime
-    .runPromise(
-      Effect.gen(function* () {
-        const logger = yield* Logger.Service
-        yield* logger.debug(message, extra)
-      }),
-    )
-    .catch(() => undefined)
+  void runtime.runPromise(Effect.logDebug(message, extra)).catch(() => undefined)
 }
 
 function warn(runtime: Runtime, message: string, extra: Record<string, unknown> = {}) {
-  void runtime
-    .runPromise(
-      Effect.gen(function* () {
-        const logger = yield* Logger.Service
-        yield* logger.warn(message, extra)
-      }),
-    )
-    .catch(() => undefined)
+  void runtime.runPromise(Effect.logWarning(message, extra)).catch(() => undefined)
 }
 
 function isTagged(error: unknown, tag: string): boolean {

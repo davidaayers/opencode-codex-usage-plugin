@@ -163,7 +163,7 @@ describe("CodexService.resolveCodexCommand", () => {
 })
 
 function createRuntime(options: CodexService.Options) {
-  return ManagedRuntime.make(CodexService.layer(options).pipe(Layer.provide(Logger.noopLayer)))
+  return ManagedRuntime.make(CodexService.layer(options).pipe(Layer.provideMerge(Logger.noopLayer)))
 }
 
 function readUsage(runtime: ReturnType<typeof createRuntime>) {
