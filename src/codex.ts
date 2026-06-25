@@ -5,7 +5,7 @@ import { createConnection } from "node:net"
 import { delimiter, join } from "node:path"
 import { createInterface, type Interface as ReadlineInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
-import { Clock, Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { Clock, Context, Effect, Layer, Predicate, Schema, Semaphore } from "effect"
 import { Logger } from "./logger.ts"
 import { Usage } from "./usage.ts"
 
@@ -147,10 +147,6 @@ export const layer = (options: Options = {}) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const context = yield* Effect.context()
-      const runDetached = Effect.runForkWith(context)
-      const startup = yield* Semaphore.make(1)
-
       const command = options.command ?? resolveCodexCommand(options.commandExists, options.env)
       const socketPath = options.socketPath ?? DEFAULT_SOCKET_PATH
       const spawnProcess = options.spawn ?? spawn
@@ -160,6 +156,13 @@ export const layer = (options: Options = {}) =>
       let transport: TransportState | undefined
       let nextId = 1
       let initialized = false
+
+      const context = yield* Effect.context()
+      // Node callbacks below run outside Effect, so they need a runtime entrypoint that preserves this layer context.
+      const runCallbackEffect = Effect.runForkWith(context)
+
+      // Only one read should initialize or reconnect the Codex transport at a time.
+      const startup = yield* Semaphore.make(1)
 
       const rejectAll = (error: Error) =>
         Effect.sync(() => {
@@ -285,7 +288,7 @@ export const layer = (options: Options = {}) =>
         }
 
         child.once("error", (cause) => {
-          runDetached(
+          runCallbackEffect(
             Effect.gen(function* () {
               if (transport?.process !== child) return
               const error = new TransportError({ message: "Codex app-server transport failed.", cause })
@@ -295,11 +298,13 @@ export const layer = (options: Options = {}) =>
         })
 
         child.stdin.on("error", (cause) => {
-          runDetached(failTransport(child, new TransportError({ message: "Codex app-server stdin failed.", cause })))
+          runCallbackEffect(
+            failTransport(child, new TransportError({ message: "Codex app-server stdin failed.", cause })),
+          )
         })
 
         child.once("exit", (code, signal) => {
-          runDetached(
+          runCallbackEffect(
             Effect.gen(function* () {
               if (transport?.process !== child) return
               const message = `Codex app-server exited with ${signal ?? code ?? "unknown status"}.`
@@ -312,12 +317,12 @@ export const layer = (options: Options = {}) =>
 
         const lines = createInterface({ input: child.stdout })
         lines.on("line", (line) => {
-          if (transport?.process === child) runDetached(handleLine(child, line))
+          if (transport?.process === child) runCallbackEffect(handleLine(child, line))
         })
         child.stderr.on("data", (chunk: Buffer | string) => {
           if (transport?.process !== child) return
           const message = chunk.toString().trim()
-          if (message) runDetached(Effect.logWarning("server.stderr", { message: message.slice(0, 500) }))
+          if (message) runCallbackEffect(Effect.logWarning("server.stderr", { message: message.slice(0, 500) }))
         })
         transport = { process: child, lines }
       })
@@ -333,21 +338,24 @@ export const layer = (options: Options = {}) =>
         return yield* Effect.callback<unknown, Error>((resume) => {
           const timer = setTimeout(() => {
             pending.delete(id)
-            runDetached(Effect.logWarning("protocol.timeout", { id, method, timeoutMs }))
             resume(
-              Effect.fail(
-                new RequestTimeoutError({
-                  id,
-                  method,
-                  timeoutMs,
-                  message: `Timed out waiting for ${method}.`,
-                }),
+              Effect.logWarning("protocol.timeout", { id, method, timeoutMs }).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new RequestTimeoutError({
+                      id,
+                      method,
+                      timeoutMs,
+                      message: `Timed out waiting for ${method}.`,
+                    }),
+                  ),
+                ),
               ),
             )
           }, timeoutMs)
 
           pending.set(id, { method, resume, timer })
-          runDetached(
+          runCallbackEffect(
             writeProtocol(current.process, payload).pipe(
               Effect.catch((error) =>
                 Effect.gen(function* () {
@@ -440,7 +448,7 @@ export const layer = (options: Options = {}) =>
           return
         }
 
-        if (message.method !== undefined && !hasOwn(message, "result") && !hasOwn(message, "error")) {
+        if (message.method !== undefined && !Object.hasOwn(message, "result") && !Object.hasOwn(message, "error")) {
           yield* Effect.logDebug("protocol.server_request", { id: message.id, method: message.method })
           if (message.method === "currentTime/read") {
             const unixTimestampMs = yield* Clock.currentTimeMillis
@@ -473,21 +481,21 @@ export const layer = (options: Options = {}) =>
         if (!request) {
           yield* Effect.logWarning("protocol.unmatched_response", {
             id: message.id,
-            hasError: hasOwn(message, "error"),
+            hasError: Object.hasOwn(message, "error"),
           })
           return
         }
 
         pending.delete(message.id)
         clearTimeout(request.timer)
-        yield* Effect.logDebug("protocol.response", { id: message.id, hasError: hasOwn(message, "error") })
+        yield* Effect.logDebug("protocol.response", { id: message.id, hasError: Object.hasOwn(message, "error") })
 
-        if (hasOwn(message, "error")) {
+        if (Object.hasOwn(message, "error")) {
           request.resume(Effect.fail(new ProtocolError({ message: formatProtocolError(message.error) })))
           return
         }
 
-        request.resume(Effect.succeed(hasOwn(message, "result") ? message.result : message))
+        request.resume(Effect.succeed(Object.hasOwn(message, "result") ? message.result : message))
       })
 
       return Service.of({
@@ -525,10 +533,6 @@ const parseProtocolMessage = Effect.fn("CodexService.parseProtocolMessage")(func
 
 function isTransportProcess(process: CodexProcess): process is TransportProcess {
   return process.stdin !== null && process.stdout !== null && process.stderr !== null
-}
-
-function hasOwn(object: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key)
 }
 
 function commandAvailable(command: string): boolean {
@@ -592,7 +596,7 @@ function removeStaleSocket(socketPath: string): Effect.Effect<void> {
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error !== null && typeof error === "object" && "code" in error
+  return Predicate.hasProperty(error, "code")
 }
 
 function isExecutable(path: string): boolean {
@@ -606,7 +610,7 @@ function isExecutable(path: string): boolean {
 
 function formatProtocolError(error: unknown): string {
   if (typeof error === "string") return error
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+  if (Predicate.hasProperty(error, "message") && typeof error.message === "string") {
     return error.message
   }
   return "Codex app-server request failed."
