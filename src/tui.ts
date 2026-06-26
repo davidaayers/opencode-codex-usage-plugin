@@ -2,7 +2,7 @@ import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import type { JSX } from "@opentui/solid"
 import { createComponent, createElement, createTextNode, effect, insert, insertNode, setProp } from "@opentui/solid"
 import { createMemo, createSignal, onCleanup } from "solid-js"
-import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect"
+import { Effect, Layer, ManagedRuntime, Option, Predicate, Schema } from "effect"
 import { CodexService } from "./codex.ts"
 import { Logger } from "./logger.js"
 import { Usage } from "./usage.js"
@@ -95,7 +95,7 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
     } catch (error) {
       if (disposed) return
       if (timeout) clearTimeout(timeout)
-      if (isTagged(error, "CodexService.CommandMissingError")) props.onMissingCodex()
+      if (Predicate.isTagged(error, "CodexService.CommandMissingError")) props.onMissingCodex()
       warn(props.runtime, "tui.refresh.error", {
         sessionID: props.session_id,
         ms: Date.now() - startedAt,
@@ -145,12 +145,20 @@ function UsageBlock(props: { state: () => UsageState; theme: () => TuiTheme }) {
     () => {
       const state = props.state()
 
-      return state.status === "ready"
-        ? UsageLines(state.usage, () => props.theme().textMuted)
-        : textLine(
+      switch (state.status) {
+        case "ready":
+          return UsageLines(state.usage, () => props.theme().textMuted)
+        case "error":
+          return textLine(
             () => props.state().message,
-            () => (props.state().status === "error" ? props.theme().warning : props.theme().textMuted),
+            () => props.theme().warning,
           )
+        case "loading":
+          return textLine(
+            () => "Loading...",
+            () => props.theme().textMuted,
+          )
+      }
     },
     null,
   )
@@ -205,13 +213,9 @@ function warn(runtime: Runtime, message: string, extra: Record<string, unknown> 
   void runtime.runPromise(Effect.logWarning(message, extra)).catch(() => undefined)
 }
 
-function isTagged(error: unknown, tag: string): boolean {
-  return error !== null && typeof error === "object" && "_tag" in error && error._tag === tag
-}
-
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (error !== null && typeof error === "object" && "message" in error && typeof error.message === "string") {
+  if (Predicate.isError(error)) return error.message
+  if (Predicate.hasProperty(error, "message") && Predicate.isString(error.message)) {
     return error.message
   }
   return "Usage unavailable"

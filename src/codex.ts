@@ -162,7 +162,7 @@ export const layer = (options: Options = {}) =>
       const runCallbackEffect = Effect.runForkWith(context)
 
       // Only one read should initialize or reconnect the Codex transport at a time.
-      const startup = yield* Semaphore.make(1)
+      const mutex = yield* Semaphore.make(1)
 
       const rejectAll = (error: Error) =>
         Effect.sync(() => {
@@ -410,7 +410,7 @@ export const layer = (options: Options = {}) =>
 
       const readUsage = Effect.fn("CodexService.readUsage")(function* () {
         yield* Effect.logDebug("usage.read.start")
-        yield* startup.withPermit(
+        yield* mutex.withPermit(
           Effect.gen(function* () {
             if (initialized && transport) return
             yield* start().pipe(Effect.onError(() => cleanupTransport()))
