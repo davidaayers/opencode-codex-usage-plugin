@@ -4,6 +4,8 @@ import { Usage } from "./usage.js"
 
 const window5h = Usage.RateLimitWindow.make({ usedPercent: 42.4, windowDurationMins: 300, resetsAt: 1_800 })
 const windowWeekly = Usage.RateLimitWindow.make({ usedPercent: 12.2, windowDurationMins: 10_080, resetsAt: 604_800 })
+const usage5h = Usage.UsageWindow.make({ label: "5h", usedPercent: 42.4, resetsAt: 1_800 })
+const usageWeekly = Usage.UsageWindow.make({ label: "weekly", usedPercent: 12.2, resetsAt: 604_800 })
 
 describe("Usage.mapRateLimitsToUsage", () => {
   it("maps primary and secondary windows", () => {
@@ -88,6 +90,26 @@ describe("Usage.formatPercent", () => {
     expect(Usage.formatRemainingPercent(28)).toBe("72%")
     expect(Usage.formatRemainingPercent(101)).toBe("0%")
     expect(Usage.formatRemainingPercent(-1)).toBe("100%")
+  })
+})
+
+describe("Usage.formatCompactUsage", () => {
+  it("prefers the five-hour window", () => {
+    const usage = Usage.CodexUsage.make({ fiveHour: usage5h, weekly: usageWeekly })
+
+    expect(Usage.formatCompactUsage(usage)).toBe("5h 58%")
+  })
+
+  it("falls back to the weekly window", () => {
+    const usage = Usage.CodexUsage.make({ fiveHour: null, weekly: usageWeekly })
+
+    expect(Usage.formatCompactUsage(usage)).toBe("weekly 88%")
+  })
+
+  it("returns nothing when no window is available", () => {
+    const usage = Usage.CodexUsage.make({ fiveHour: null, weekly: null })
+
+    expect(Usage.formatCompactUsage(usage)).toBeNull()
   })
 })
 

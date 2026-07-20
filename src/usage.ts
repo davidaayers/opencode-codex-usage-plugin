@@ -59,6 +59,11 @@ export function formatRemainingPercent(usedPercent: number): string {
   return formatPercent(100 - usedPercent)
 }
 
+export function formatCompactUsage(usage: CodexUsage): string | null {
+  const window = usage.fiveHour ?? usage.weekly
+  return window ? `${window.label} ${formatRemainingPercent(window.usedPercent)}` : null
+}
+
 export function formatResetTime(unixSeconds: number | null, now = new Date()): string {
   if (!unixSeconds) return "reset unknown"
 

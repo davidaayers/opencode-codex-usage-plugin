@@ -1,7 +1,16 @@
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import type { JSX } from "@opentui/solid"
-import { createComponent, createElement, createTextNode, effect, insert, insertNode, setProp } from "@opentui/solid"
-import { createMemo, createSignal, onCleanup } from "solid-js"
+import {
+  createComponent,
+  createElement,
+  createTextNode,
+  effect,
+  insert,
+  insertNode,
+  setProp,
+  useTerminalDimensions,
+} from "@opentui/solid"
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { Effect, Layer, ManagedRuntime, Option, Predicate, Schema } from "effect"
 import { CodexService } from "./codex.ts"
 import { Logger } from "./logger.js"
@@ -28,6 +37,42 @@ const UI_TIMEOUT_MS = 15_000
 
 function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; onMissingCodex: () => void }) {
   const theme = () => props.api.theme.current
+  const { state, isOpenAI } = createUsagePolling(props)
+
+  const root = createElement("box")
+
+  insert(root, () => (isOpenAI() ? UsageBlock({ state, theme }) : null), null)
+
+  return root
+}
+
+function CompactView(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; onMissingCodex: () => void }) {
+  const dimensions = useTerminalDimensions()
+  const theme = () => props.api.theme.current
+  const sidebarHidden = createMemo(() => !isSidebarVisible(props.api, props.session_id, dimensions().width))
+  const { state, isOpenAI } = createUsagePolling({
+    api: props.api,
+    get session_id() {
+      return props.session_id
+    },
+    runtime: props.runtime,
+    onMissingCodex: props.onMissingCodex,
+    enabled: sidebarHidden,
+  })
+  const root = createElement("box")
+
+  insert(root, () => (isOpenAI() && sidebarHidden() ? CompactUsageLine({ state, theme }) : null), null)
+
+  return root
+}
+
+function createUsagePolling(props: {
+  api: TuiPluginApi
+  session_id: string
+  runtime: Runtime
+  onMissingCodex: () => void
+  enabled?: () => boolean
+}) {
   const [state, setState] = createSignal<UsageState>({
     status: "loading",
     usage: null,
@@ -35,6 +80,7 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
   })
 
   const isOpenAI = createMemo(() => isOpenAISession(props.api, props.session_id))
+  const enabled = props.enabled ?? (() => true)
 
   let disposed = false
   let timer: ReturnType<typeof setInterval> | undefined
@@ -61,6 +107,8 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
   }
 
   const runRefresh = async () => {
+    if (!enabled()) return
+
     if (!isOpenAI()) {
       debug(props.runtime, "tui.refresh.skip", { reason: "provider_not_openai", sessionID: props.session_id })
       return
@@ -110,7 +158,9 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
     }
   }
 
-  void refresh()
+  createEffect(() => {
+    if (enabled()) untrack(() => void refresh())
+  })
   timer = setInterval(() => void refresh(), POLL_MS)
   const unsubscribeMessage = props.api.event.on("message.updated", () => void refresh())
   const unsubscribeSession = props.api.event.on("session.updated", () => void refresh())
@@ -123,11 +173,7 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
     if (timeout) clearTimeout(timeout)
   })
 
-  const root = createElement("box")
-
-  insert(root, () => (isOpenAI() ? UsageBlock({ state, theme }) : null), null)
-
-  return root
+  return { state, isOpenAI }
 }
 
 function UsageBlock(props: { state: () => UsageState; theme: () => TuiTheme }) {
@@ -179,6 +225,24 @@ function UsageLines(usage: Usage.CodexUsage, color: () => TuiColor) {
   return [UsageLine("5h", usage.fiveHour, color), UsageLine("weekly", usage.weekly, color)]
 }
 
+function CompactUsageLine(props: { state: () => UsageState; theme: () => TuiTheme }) {
+  return textLine(
+    () => compactUsageText(props.state()),
+    () => props.theme().textMuted,
+  )
+}
+
+function compactUsageText(state: UsageState) {
+  switch (state.status) {
+    case "ready":
+      return Usage.formatCompactUsage(state.usage) ?? ""
+    case "error":
+      return ""
+    case "loading":
+      return "5h ..."
+  }
+}
+
 function UsageLine(label: string, usage: Usage.CodexUsage["fiveHour"], color: () => TuiColor) {
   return textLine(
     () =>
@@ -198,6 +262,11 @@ function isOpenAISession(api: TuiPluginApi, sessionID: string): boolean {
 
 function readAssistantProviderID(message: unknown): string | undefined {
   return Option.getOrUndefined(decodeAssistantProviderMessage(message))?.providerID
+}
+
+function isSidebarVisible(api: TuiPluginApi, sessionID: string, width: number): boolean {
+  if (api.state.session.get(sessionID)?.parentID) return false
+  return api.kv.get<"auto" | "hide">("sidebar", "auto") === "auto" && width > 120
 }
 
 function createRuntime(api: TuiPluginApi) {
@@ -245,6 +314,19 @@ const plugin: TuiPluginModule & { id: string } = {
       slots: {
         sidebar_content(_ctx, props) {
           const view = createComponent(View, {
+            api,
+            get session_id() {
+              return props.session_id
+            },
+            runtime,
+            onMissingCodex: warnMissingCodex,
+          })
+
+          // OpenTUI's runtime primitives return renderables, while the slot API is typed through Solid's JSX facade.
+          return view as unknown as JSX.Element
+        },
+        session_prompt_right(_ctx, props) {
+          const view = createComponent(CompactView, {
             api,
             get session_id() {
               return props.session_id
