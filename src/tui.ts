@@ -193,7 +193,11 @@ function UsageBlock(props: { state: () => UsageState; theme: () => TuiTheme }) {
 
       switch (state.status) {
         case "ready":
-          return UsageLines(state.usage, () => props.theme().textMuted)
+          return UsageLines(
+            state.usage,
+            () => props.theme().textMuted,
+            () => props.theme().warning,
+          )
         case "error":
           return textLine(
             () => props.state().message,
@@ -221,8 +225,11 @@ function textLine(text: () => string, color: () => TuiColor) {
   return line
 }
 
-function UsageLines(usage: Usage.CodexUsage, color: () => TuiColor) {
-  return [UsageLine("5h", usage.fiveHour, color), UsageLine("weekly", usage.weekly, color)]
+function UsageLines(usage: Usage.CodexUsage, color: () => TuiColor, warningColor: () => TuiColor) {
+  const lines = Usage.formatUsageLines(usage)
+  if (lines.length === 0) return textLine(() => "Usage unavailable", warningColor)
+
+  return lines.map((line) => textLine(() => line, color))
 }
 
 function CompactUsageLine(props: { state: () => UsageState; theme: () => TuiTheme }) {
@@ -241,14 +248,6 @@ function compactUsageText(state: UsageState) {
     case "loading":
       return "5h ..."
   }
-}
-
-function UsageLine(label: string, usage: Usage.CodexUsage["fiveHour"], color: () => TuiColor) {
-  return textLine(
-    () =>
-      `${label}: ${usage ? `${Usage.formatRemainingPercent(usage.usedPercent)} · ${Usage.formatResetTime(usage.resetsAt)}` : "unavailable"}`,
-    color,
-  )
 }
 
 function isOpenAISession(api: TuiPluginApi, sessionID: string): boolean {
