@@ -86,24 +86,19 @@ describe("Usage.formatPercent", () => {
     expect(Usage.formatPercent(-1)).toBe("0%")
   })
 
-  it("formats remaining percentages from used percentages", () => {
-    expect(Usage.formatRemainingPercent(28)).toBe("72%")
-    expect(Usage.formatRemainingPercent(101)).toBe("0%")
-    expect(Usage.formatRemainingPercent(-1)).toBe("100%")
-  })
 })
 
 describe("Usage.formatCompactUsage", () => {
   it("prefers the five-hour window", () => {
     const usage = Usage.CodexUsage.make({ fiveHour: usage5h, weekly: usageWeekly })
 
-    expect(Usage.formatCompactUsage(usage)).toBe("5h 58%")
+    expect(Usage.formatCompactUsage(usage)).toBe("5h 42% used")
   })
 
   it("falls back to the weekly window", () => {
     const usage = Usage.CodexUsage.make({ fiveHour: null, weekly: usageWeekly })
 
-    expect(Usage.formatCompactUsage(usage)).toBe("weekly 88%")
+    expect(Usage.formatCompactUsage(usage)).toBe("weekly 12% used")
   })
 
   it("returns nothing when no window is available", () => {
@@ -124,7 +119,7 @@ describe("Usage.formatUsageLines", () => {
       weekly: Usage.UsageWindow.make({ label: "weekly", usedPercent: 13, resetsAt: 604_800 }),
     })
 
-    expect(Usage.formatUsageLines(usage)).toEqual(["weekly: 87% · resets in 7d"])
+    expect(Usage.formatUsageLines(usage)).toEqual(["weekly: 13% used · resets in 7d"])
   })
 
   it("returns no lines when all usage windows are unavailable", () => {

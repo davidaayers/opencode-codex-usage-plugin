@@ -55,13 +55,9 @@ export function formatPercent(value: number): string {
   return `${Math.max(0, Math.min(100, Math.round(value)))}%`
 }
 
-export function formatRemainingPercent(usedPercent: number): string {
-  return formatPercent(100 - usedPercent)
-}
-
 export function formatCompactUsage(usage: CodexUsage): string | null {
   const window = usage.fiveHour ?? usage.weekly
-  return window ? `${window.label} ${formatRemainingPercent(window.usedPercent)}` : null
+  return window ? `${window.label} ${formatPercent(window.usedPercent)} used` : null
 }
 
 export function formatUsageLines(usage: CodexUsage): ReadonlyArray<string> {
@@ -69,7 +65,7 @@ export function formatUsageLines(usage: CodexUsage): ReadonlyArray<string> {
     .filter((window): window is UsageWindow => window !== null)
     .map(
       (window) =>
-        `${window.label}: ${formatRemainingPercent(window.usedPercent)} · ${formatResetTime(window.resetsAt)}`,
+        `${window.label}: ${formatPercent(window.usedPercent)} used · ${formatResetTime(window.resetsAt)}`,
     )
 }
 
