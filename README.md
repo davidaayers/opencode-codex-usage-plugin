@@ -36,7 +36,7 @@ OpenCode TUI plugins load from the `plugin` array in **`~/.config/opencode/tui.j
 // ~/.config/opencode/tui.json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["file:///absolute/path/to/opencode-codex-usage-plugin/dist/tui.js"]
+  "plugin": ["file:///absolute/path/to/opencode-codex-usage-plugin/dist/tui.js"],
 }
 ```
 
@@ -66,6 +66,10 @@ pnpm build
 ```
 
 The published plugin entrypoint is [`dist/tui.js`](dist/tui.js), generated from [`src/tui.ts`](src/tui.ts).
+
+## Roadmap
+
+Cross-repository follow-up work is tracked in the [OpenCode Plugins project](https://github.com/users/davidaayers/projects/1).
 
 ## Credits
 
