@@ -34,6 +34,11 @@ const decodeAssistantProviderMessage = Schema.decodeUnknownOption(AssistantProvi
 
 const POLL_MS = 60_000
 const UI_TIMEOUT_MS = 15_000
+const GAUGE_WIDTH = 7
+const EIGHTHS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+const OK_AT = 50
+const WARN_AT = 75
+const DANGER_AT = 90
 
 function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; onMissingCodex: () => void }) {
   const theme = () => props.api.theme.current
@@ -193,11 +198,7 @@ function UsageBlock(props: { state: () => UsageState; theme: () => TuiTheme }) {
 
       switch (state.status) {
         case "ready":
-          return UsageLines(
-            state.usage,
-            () => props.theme().textMuted,
-            () => props.theme().warning,
-          )
+          return UsageGauges(state.usage, props.theme)
         case "error":
           return textLine(
             () => props.state().message,
@@ -225,11 +226,53 @@ function textLine(text: () => string, color: () => TuiColor) {
   return line
 }
 
-function UsageLines(usage: Usage.CodexUsage, color: () => TuiColor, warningColor: () => TuiColor) {
-  const lines = Usage.formatUsageLines(usage)
-  if (lines.length === 0) return textLine(() => "Usage unavailable", warningColor)
+function UsageGauges(usage: Usage.CodexUsage, theme: () => TuiTheme) {
+  const root = createElement("box")
+  const row = createElement("box")
+  setProp(row, "flexDirection", "row")
+  setProp(row, "columnGap", 1)
+  insertNode(root, row)
+  insertNode(row, UsageGauge("5h", usage.fiveHour, theme))
+  insertNode(row, UsageGauge("week", usage.weekly, theme))
+  return root
+}
 
-  return lines.map((line) => textLine(() => line, color))
+function UsageGauge(label: string, window: Usage.UsageWindow | null, theme: () => TuiTheme) {
+  const root = createElement("box")
+  const barLine = createElement("box")
+  const detailLine = createElement("box")
+  setProp(root, "flexDirection", "column")
+  setProp(barLine, "flexDirection", "row")
+  setProp(detailLine, "flexDirection", "row")
+
+  const labelText = createElement("text")
+  insertNode(labelText, createTextNode(`${label} `))
+  effect(() => setProp(labelText, "fg", theme().textMuted))
+
+  const fillText = createElement("text")
+  const trackText = createElement("text")
+  const percentText = createElement("text")
+  const resetText = createElement("text")
+  insert(fillText, () => usageGauge(window?.usedPercent ?? 0, GAUGE_WIDTH).fill)
+  insert(trackText, () => usageGauge(window?.usedPercent ?? 0, GAUGE_WIDTH).track)
+  insert(percentText, () => (window ? Usage.formatPercent(window.usedPercent) : "--"))
+  insert(resetText, () => (window ? ` · ${shortReset(window.resetsAt)}` : ""))
+  effect(() => {
+    const color = window ? levelColor(window.usedPercent, theme()) : theme().textMuted
+    setProp(fillText, "fg", color)
+    setProp(percentText, "fg", color)
+    setProp(trackText, "fg", theme().textMuted)
+    setProp(resetText, "fg", theme().textMuted)
+  })
+
+  insertNode(barLine, labelText)
+  insertNode(barLine, fillText)
+  insertNode(barLine, trackText)
+  insertNode(detailLine, percentText)
+  insertNode(detailLine, resetText)
+  insertNode(root, barLine)
+  insertNode(root, detailLine)
+  return root
 }
 
 function CompactUsageLine(props: { state: () => UsageState; theme: () => TuiTheme }) {
@@ -242,12 +285,61 @@ function CompactUsageLine(props: { state: () => UsageState; theme: () => TuiThem
 function compactUsageText(state: UsageState) {
   switch (state.status) {
     case "ready":
-      return Usage.formatCompactUsage(state.usage) ?? ""
+      return compactGaugeText(state.usage)
     case "error":
       return ""
     case "loading":
       return "5h ..."
   }
+}
+
+function gauge(fraction: number, width: number): { fill: string; track: string } {
+  const cells = Math.min(1, Math.max(0, fraction)) * width
+  let full = Math.floor(cells)
+  let partial = EIGHTHS[Math.round((cells - full) * 8)] ?? ""
+  if (partial === EIGHTHS[8]) {
+    full += 1
+    partial = ""
+  }
+  return {
+    fill: "█".repeat(full) + partial,
+    track: "░".repeat(width - full - (partial ? 1 : 0)),
+  }
+}
+
+function usageGauge(percent: number, width: number): { fill: string; track: string } {
+  return gauge(percent / 100, width)
+}
+
+function levelColor(percent: number, theme: TuiTheme): TuiColor {
+  if (percent >= DANGER_AT) return theme.error
+  if (percent >= WARN_AT) return theme.warning
+  if (percent >= OK_AT) return theme.accent
+  return theme.success
+}
+
+function shortReset(unixSeconds: number | null, now = new Date()): string {
+  const formatted = Usage.formatResetTime(unixSeconds, now)
+  if (formatted === "reset unknown") return "?"
+  if (formatted === "resets now") return "now"
+  return formatted.replace("resets in ", "")
+}
+
+function compactGaugeText(usage: Usage.CodexUsage): string {
+  const windows = [usage.fiveHour, usage.weekly].filter((window): window is Usage.UsageWindow => window !== null)
+  const window = windows.reduce<Usage.UsageWindow | undefined>(
+    (worst, current) => (!worst || current.usedPercent > worst.usedPercent ? current : worst),
+    undefined,
+  )
+  return window ? `Codex ${window.label} ${Usage.formatPercent(window.usedPercent)}` : ""
+}
+
+export const CodexUsageFormat = {
+  gauge,
+  usageGauge,
+  levelColor,
+  shortReset,
+  compactGaugeText,
 }
 
 function isOpenAISession(api: TuiPluginApi, sessionID: string): boolean {

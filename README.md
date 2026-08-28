@@ -1,62 +1,76 @@
 # opencode-codex-usage-plugin
 
-Show your Codex usage and reset times directly in the OpenCode sidebar.
+An [OpenCode](https://opencode.ai) TUI sidebar plugin that shows Codex 5-hour and weekly quota usage as compact gauges with reset countdowns.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/zaniluca/opencode-codex-usage-plugin/main/assets/demo.gif" alt="opencode-codex-usage-plugin demo" width="80%">
-</p>
+```text
+Codex Usage
+5h   ███░░░░  week █████▋░
+42% · 2h      81% · 7d
+```
 
-This plugin reads Codex usage from Codex App or the Codex CLI and renders the current 5-hour and weekly limits inside OpenCode, so you can keep an eye on quota without leaving the TUI.
+This is a maintained fork of [zaniluca/opencode-codex-usage-plugin](https://github.com/zaniluca/opencode-codex-usage-plugin). It keeps the original Codex App/CLI integration and presents the usage data in the gauge style used by the other David Ayers OpenCode plugins.
+
+## Features
+
+- **Quota gauges** — compact eighth-block gauges for the 5-hour and weekly Codex limits
+- **Proximity colors** — gauge and percentage use the active theme: `success` <50% → `accent` 50–74% → `warning` 75–89% → `error` ≥90%
+- **Reset countdowns** — short reset times appear beneath each available window
+- **Compact prompt line** — identifies the most constrained window when the sidebar is hidden
+- **Codex App/CLI support** — reads usage through the Codex app-server protocol with command discovery and fallback handling
+- **Live updates** — refreshes every 60 seconds and on message/session events
+- **Silent by design** — hidden for non-Codex sessions
 
 ## Install
-
-Use OpenCode's native plugin installer:
 
 ```sh
 opencode plugin --global @davidaayers/opencode-codex-usage-plugin
 ```
 
-This installs the plugin and updates your global OpenCode TUI config automatically.
+Or from inside OpenCode: press `ctrl+p` → "Install Plugin" → `@davidaayers/opencode-codex-usage-plugin`. Restart OpenCode and the gauges appear once the session uses an OpenAI/Codex model.
 
-Alternatively, add the plugin manually to your OpenCode TUI config (`~/.config/opencode/tui.json`):
+### From source
+
+OpenCode TUI plugins load from the `plugin` array in **`~/.config/opencode/tui.json`** (or a project-level `tui.json`) — _not_ from `opencode.jsonc`, whose `plugin` array is server-side only.
 
 ```jsonc
-// tui.json
+// ~/.config/opencode/tui.json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["@davidaayers/opencode-codex-usage-plugin"]
+  "plugin": ["file:///absolute/path/to/opencode-codex-usage-plugin/dist/tui.js"]
 }
 ```
-
-Restart OpenCode after changing the config.
-
-> [!IMPORTANT]
-> This is a TUI plugin, so configure it in `tui.json`, not in `opencode.json`.
-> The `plugin` field in `opencode.json` is for server/runtime plugins and will not load this sidebar plugin.
 
 ## Requirements
 
 Install either **Codex App** or the **Codex CLI**. The plugin looks for Codex in common locations and on your `PATH`.
 
-If your Codex command lives somewhere else, set `OPENCODE_CODEX_USAGE_COMMAND` in your shell config:
+If your Codex command lives somewhere else, set `OPENCODE_CODEX_USAGE_COMMAND`:
 
 ```sh
-# ~/.zshrc or ~/.bashrc
 export OPENCODE_CODEX_USAGE_COMMAND="/path/to/codex"
 ```
 
-Then reload your shell config or open a new terminal before starting OpenCode.
+## How It Works
 
-## Contributing
+- **Usage source**: the Codex app-server provides normalized 5-hour and weekly rate-limit windows.
+- **Rendering**: the plugin uses OpenTUI and the active OpenCode theme, with the gauge renderer kept separate from the Codex transport.
+- **Lifecycle**: the existing Effect-based service owns command discovery, socket reuse, stdio fallback, request timeouts, and cleanup.
 
-Contributions are welcome! Please open an issue or submit a pull request on GitHub. To get started fork the repo, install the dependencies and in your OpenCode TUI config add the local path to the output of the plugin like so:
+## Development
 
-```jsonc
-// tui.json
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["file:///Users/<your_username>/path/to/your-clone/opencode-codex-usage-plugin/dist/tui.js"]
-}
+```sh
+pnpm install
+pnpm check
+pnpm test
+pnpm build
 ```
 
-The plugin logic is made with [Effect](https://github.com/Effect-TS/effect). There is no particular reason I chose it, it was simply an excuse to try it out.
+The published plugin entrypoint is [`dist/tui.js`](dist/tui.js), generated from [`src/tui.ts`](src/tui.ts).
+
+## Credits
+
+The Codex integration is forked from [zaniluca/opencode-codex-usage-plugin](https://github.com/zaniluca/opencode-codex-usage-plugin). The gauge presentation is inspired by [@davidaayers/opencode-go-usage-plugin](https://github.com/davidaayers/opencode-go-usage-plugin) and [@davidaayers/opencode-context-gauge-plugin](https://github.com/davidaayers/opencode-context-gauge-plugin).
+
+## License
+
+[MIT](LICENSE). See the upstream project for the original implementation and attribution.
