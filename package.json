@@ -1,6 +1,6 @@
 {
-  "name": "opencode-codex-usage-plugin",
-  "version": "0.0.3",
+  "name": "@davidaayers/opencode-codex-usage-plugin",
+  "version": "0.1.0",
   "description": "OpenCode TUI plugin that shows Codex usage and reset times.",
   "keywords": [
     "codex",
@@ -9,15 +9,15 @@
     "tui",
     "usage"
   ],
-  "homepage": "https://github.com/zaniluca/opencode-codex-usage-plugin#readme",
+  "homepage": "https://github.com/davidaayers/opencode-codex-usage-plugin#readme",
   "bugs": {
-    "url": "https://github.com/zaniluca/opencode-codex-usage-plugin/issues"
+    "url": "https://github.com/davidaayers/opencode-codex-usage-plugin/issues"
   },
   "license": "MIT",
-  "author": "Luca Zani <zani.luca@icloud.com>",
+  "author": "David Ayers",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zaniluca/opencode-codex-usage-plugin.git"
+    "url": "git+https://github.com/davidaayers/opencode-codex-usage-plugin.git"
   },
   "files": [
     "dist"

@@ -13,7 +13,7 @@ This plugin reads Codex usage from Codex App or the Codex CLI and renders the cu
 Use OpenCode's native plugin installer:
 
 ```sh
-opencode plugin opencode-codex-usage-plugin@latest --global
+opencode plugin --global @davidaayers/opencode-codex-usage-plugin
 ```
 
 This installs the plugin and updates your global OpenCode TUI config automatically.
@@ -24,7 +24,7 @@ Alternatively, add the plugin manually to your OpenCode TUI config (`~/.config/o
 // tui.json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-codex-usage-plugin@latest"]
+  "plugin": ["@davidaayers/opencode-codex-usage-plugin"]
 }
 ```
 
