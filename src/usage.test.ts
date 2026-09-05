@@ -22,6 +22,13 @@ describe("Usage.mapRateLimitsToUsage", () => {
     expect(usage.weekly?.usedPercent).toBe(12.2)
   })
 
+  it("leaves the five-hour window unavailable when only weekly usage is returned", () => {
+    const usage = Usage.mapRateLimitsToUsage(response(snapshot({ primary: windowWeekly, secondary: null })))
+
+    expect(usage.fiveHour).toBeNull()
+    expect(usage.weekly?.usedPercent).toBe(12.2)
+  })
+
   it("prefers the codex bucket when rateLimitsByLimitId is present", () => {
     const usage = Usage.mapRateLimitsToUsage(
       Usage.RateLimitsResponse.make({

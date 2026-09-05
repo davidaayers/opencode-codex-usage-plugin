@@ -35,6 +35,7 @@ const decodeAssistantProviderMessage = Schema.decodeUnknownOption(AssistantProvi
 const POLL_MS = 60_000
 const UI_TIMEOUT_MS = 15_000
 const GAUGE_WIDTH = 7
+const EXPANDED_GAUGE_WIDTH = 28
 const EIGHTHS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
 const OK_AT = 50
 const WARN_AT = 75
@@ -229,15 +230,16 @@ function textLine(text: () => string, color: () => TuiColor) {
 function UsageGauges(usage: Usage.CodexUsage, theme: () => TuiTheme) {
   const root = createElement("box")
   const row = createElement("box")
+  const gaugeWidth = usage.fiveHour ? GAUGE_WIDTH : EXPANDED_GAUGE_WIDTH
   setProp(row, "flexDirection", "row")
   setProp(row, "columnGap", 1)
   insertNode(root, row)
-  insertNode(row, UsageGauge("5h", usage.fiveHour, theme))
-  insertNode(row, UsageGauge("week", usage.weekly, theme))
+  if (usage.fiveHour) insertNode(row, UsageGauge("5h", usage.fiveHour, theme, gaugeWidth))
+  if (usage.weekly) insertNode(row, UsageGauge("week", usage.weekly, theme, gaugeWidth))
   return root
 }
 
-function UsageGauge(label: string, window: Usage.UsageWindow | null, theme: () => TuiTheme) {
+function UsageGauge(label: string, window: Usage.UsageWindow | null, theme: () => TuiTheme, width: number) {
   const root = createElement("box")
   const barLine = createElement("box")
   const detailLine = createElement("box")
@@ -253,8 +255,8 @@ function UsageGauge(label: string, window: Usage.UsageWindow | null, theme: () =
   const trackText = createElement("text")
   const percentText = createElement("text")
   const resetText = createElement("text")
-  insert(fillText, () => usageGauge(window?.usedPercent ?? 0, GAUGE_WIDTH).fill)
-  insert(trackText, () => usageGauge(window?.usedPercent ?? 0, GAUGE_WIDTH).track)
+  insert(fillText, () => usageGauge(window?.usedPercent ?? 0, width).fill)
+  insert(trackText, () => usageGauge(window?.usedPercent ?? 0, width).track)
   insert(percentText, () => (window ? Usage.formatPercent(window.usedPercent) : "--"))
   insert(resetText, () => (window ? ` · ${shortReset(window.resetsAt)}` : ""))
   effect(() => {
