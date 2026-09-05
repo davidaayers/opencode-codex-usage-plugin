@@ -4,6 +4,20 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to publish, for example v0.1.2
+        required: true
+        type: string
+      version:
+        description: Package version matching the tag, for example 0.1.2
+        required: true
+        type: string
+      sha:
+        description: Commit SHA pointed to by the release tag
+        required: true
+        type: string
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -21,30 +35,61 @@ jobs:
     steps:
       - name: Run Release Please
         id: release
+        if: ${{ github.event_name == 'push' }}
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
       - name: Checkout release tag
-        if: ${{ steps.release.outputs['.--release_created'] == 'true' }}
+        if: ${{ steps.release.outputs['.--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ steps.release.outputs['.--tag_name'] }}
+          ref: ${{ steps.release.outputs['.--tag_name'] || inputs.tag_name }}
+
+      - name: Verify release contents
+        if: ${{ steps.release.outputs['.--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
+        env:
+          EXPECTED_SHA: ${{ steps.release.outputs['.--sha'] || inputs.sha }}
+          EXPECTED_TAG: ${{ steps.release.outputs['.--tag_name'] || inputs.tag_name }}
+          EXPECTED_VERSION: ${{ steps.release.outputs['.--version'] || inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]]; then
+            printf 'Release tag does not point to the expected commit.\n' >&2
+            exit 1
+          fi
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            if (packageJson.version !== process.env.EXPECTED_VERSION) {
+              throw new Error(`Unexpected package version: ${packageJson.version}`);
+            }
+            const expectedTag = `v${process.env.EXPECTED_VERSION}`;
+            const actualTag = process.env.EXPECTED_TAG;
+            if (actualTag !== expectedTag) {
+              throw new Error(`Expected tag ${expectedTag}, got ${actualTag}`);
+            }
+          '
 
       - name: Setup Node
-        if: ${{ steps.release.outputs['.--release_created'] == 'true' }}
+        if: ${{ steps.release.outputs['.--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22.14.0
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Prepare pnpm
-        if: ${{ steps.release.outputs['.--release_created'] == 'true' }}
+        if: ${{ steps.release.outputs['.--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
         run: corepack enable
 
+      - name: Install dependencies
+        if: ${{ steps.release.outputs['.--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: pnpm install --frozen-lockfile
+
       - name: Publish to npm
-        if: ${{ steps.release.outputs['.--release_created'] == 'true' }}
+        if: ${{ steps.release.outputs['.--release_created'] == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
           npm install --global npm@11.5.1
           npm publish --provenance --access public
