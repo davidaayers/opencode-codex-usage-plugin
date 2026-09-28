@@ -1,7 +1,7 @@
 {
   "include-component-in-tag": false,
   "include-v-in-tag": true,
-  "separate-pull-requests": false,
+  "separate-pull-requests": true,
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "changelog-sections": [
