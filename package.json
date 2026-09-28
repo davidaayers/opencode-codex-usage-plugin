@@ -46,12 +46,14 @@
   "dependencies": {
     "@opencode-ai/plugin": "^1.17.9",
     "@opentui/solid": "^0.4.1",
+    "codex-websocket": "npm:ws@^8.22.0",
     "effect": "4.0.0-beta.85",
     "solid-js": "1.9.12"
   },
   "devDependencies": {
     "@effect/language-service": "0.86.2",
     "@effect/vitest": "4.0.0-beta.85",
+    "@types/codex-websocket": "npm:@types/ws@^8.18.1",
     "@types/node": "^24.10.1",
     "effect-solutions": "^0.5.3",
     "oxfmt": "^0.56.0",

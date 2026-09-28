@@ -1,9 +1,13 @@
 import { EventEmitter } from "node:events"
+import { createServer } from "node:http"
 import { createRequire } from "node:module"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { PassThrough } from "node:stream"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { vi } from "vitest"
+import { WebSocketServer } from "codex-websocket"
 import { CodexService } from "./codex.ts"
 import { Logger } from "./logger.ts"
 
@@ -19,9 +23,107 @@ type TestProcess = EventEmitter & {
 }
 
 describe("CodexService", () => {
+  it("reuses a shared WebSocket app-server across OpenCode instances", async () => {
+    const socketPath = join(tmpdir(), `ocu-test-${process.pid}-${Date.now()}.sock`)
+    const server = createServer()
+    const websockets = new WebSocketServer({ server })
+    let connections = 0
+    const extensions: Array<string | undefined> = []
+    server.on("upgrade", (request) => extensions.push(request.headers["sec-websocket-extensions"]))
+    websockets.on("connection", (socket) => {
+      connections++
+      socket.on("message", (data) => {
+        const request = JSON.parse(data.toString())
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            result:
+              request.method === "initialize"
+                ? {}
+                : {
+                    rateLimits: {
+                      primary: { usedPercent: 14, windowDurationMins: 300, resetsAt: 123 },
+                      secondary: null,
+                    },
+                    rateLimitsByLimitId: null,
+                  },
+          }),
+        )
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve))
+    const spawn = vi.fn()
+    const first = createRuntime({ command: "/tmp/codex", socketPath, spawn, timeoutMs: 500 })
+    const second = createRuntime({ command: "/tmp/codex", socketPath, spawn, timeoutMs: 500 })
+
+    try {
+      const usage = await Promise.all([readUsage(first), readUsage(second)])
+      expect(usage.map((value) => value.fiveHour?.usedPercent)).toEqual([14, 14])
+      expect(connections).toBe(2)
+      expect(extensions).toEqual([undefined, undefined])
+      expect(spawn).not.toHaveBeenCalled()
+    } finally {
+      await first.dispose()
+      await second.dispose()
+      await new Promise<void>((resolve) => websockets.close(() => resolve()))
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+
+  it("falls back to stdio when a shared server has stale authentication", async () => {
+    const socketPath = join(tmpdir(), `ocu-stale-auth-${process.pid}-${Date.now()}.sock`)
+    const server = createServer()
+    const websockets = new WebSocketServer({ server })
+    websockets.on("connection", (socket) => {
+      socket.on("message", (data) => {
+        const request = JSON.parse(data.toString())
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            ...(request.method === "initialize"
+              ? { result: {} }
+              : { error: { message: "401 Unauthorized: token_revoked" } }),
+          }),
+        )
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve))
+    const direct = createProcess()
+    const spawn = vi.fn().mockReturnValueOnce(direct)
+    const runtime = createRuntime({ command: "/tmp/codex", socketPath, spawn, timeoutMs: 500 })
+
+    try {
+      const usagePromise = readUsage(runtime)
+      void usagePromise.catch(() => undefined)
+      const initialize = await waitForRequest(direct)
+      expect(initialize.method).toBe("initialize")
+      direct.stdout.write(`${JSON.stringify({ id: initialize.id, result: {} })}\n`)
+      const rateLimits = await waitForRequest(direct)
+      expect(rateLimits.method).toBe("account/rateLimits/read")
+      direct.stdout.write(
+        `${JSON.stringify({
+          id: rateLimits.id,
+          result: {
+            rateLimits: { primary: { usedPercent: 14, windowDurationMins: 300, resetsAt: 123 }, secondary: null },
+            rateLimitsByLimitId: null,
+          },
+        })}\n`,
+      )
+      await expect(usagePromise).resolves.toMatchObject({ fiveHour: { usedPercent: 14 } })
+      expect(spawn).toHaveBeenCalledOnce()
+      expect(spawn).toHaveBeenCalledWith("/tmp/codex", ["app-server", "--listen", "stdio://"], {
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+    } finally {
+      await runtime.dispose()
+      await new Promise<void>((resolve) => websockets.close(() => resolve()))
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+
   it("falls back to stdio when the shared Unix socket is unavailable", async () => {
     const direct = createProcess()
-    const socketPath = "/tmp/ocu-test.sock"
+    const socketPath = join(tmpdir(), `ocu-missing-${process.pid}-${Date.now()}.sock`)
     const spawn = vi.fn().mockReturnValueOnce(createProcess()).mockReturnValueOnce(direct)
     const runtime = createRuntime({ command: "/tmp/codex", socketPath, spawn, timeoutMs: 100 })
 
@@ -83,6 +185,23 @@ describe("CodexService", () => {
         fiveHour: { label: "5h", usedPercent: 14, resetsAt: 123 },
         weekly: { label: "weekly", usedPercent: 42, resetsAt: 456 },
       })
+    } finally {
+      await runtime.dispose()
+      expect(direct.kill).toHaveBeenCalledOnce()
+    }
+  })
+
+  it("cleans up a stdio app-server that does not answer initialize", async () => {
+    const direct = createProcess()
+    const spawn = vi.fn().mockReturnValueOnce(createProcess()).mockReturnValueOnce(direct)
+    const runtime = createRuntime({ command: "/tmp/codex", socketPath: "/tmp/ocu-timeout.sock", spawn, timeoutMs: 50 })
+
+    try {
+      await expect(readUsage(runtime)).rejects.toMatchObject({
+        _tag: "CodexService.RequestTimeoutError",
+        method: "initialize",
+      })
+      expect(direct.kill).toHaveBeenCalledOnce()
     } finally {
       await runtime.dispose()
     }

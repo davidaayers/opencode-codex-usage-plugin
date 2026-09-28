@@ -14,6 +14,9 @@ importers:
       '@opentui/solid':
         specifier: ^0.4.1
         version: 0.4.1(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      codex-websocket:
+        specifier: npm:ws@^8.22.0
+        version: ws@8.22.0
       effect:
         specifier: 4.0.0-beta.85
         version: 4.0.0-beta.85
@@ -27,6 +30,9 @@ importers:
       '@effect/vitest':
         specifier: 4.0.0-beta.85
         version: 4.0.0-beta.85(effect@4.0.0-beta.85)(vitest@4.1.9(@types/node@24.13.2)(vite@8.0.16(@types/node@24.13.2)(yaml@2.9.0)))
+      '@types/codex-websocket':
+        specifier: npm:@types/ws@^8.18.1
+        version: '@types/ws@8.18.1'
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.2
@@ -1270,8 +1276,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+  ws@8.22.0:
+    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1504,7 +1510,7 @@ snapshots:
     dependencies:
       '@types/ws': 8.18.1
       effect: 4.0.0-beta.59
-      ws: 8.21.0
+      ws: 8.22.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -2380,7 +2386,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  ws@8.21.0: {}
+  ws@8.22.0: {}
 
   yallist@3.1.1: {}
 
