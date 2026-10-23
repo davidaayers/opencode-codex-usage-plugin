@@ -5,11 +5,30 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { createRequire } from "node:module"
 import { RGBA } from "@opentui/core"
-import { testRender } from "@opentui/solid"
+import { testRender, createElement, insert, setProp } from "@opentui/solid"
 import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
 import * as effectRuntime from "effect"
 import * as tuiRuntime from "@opencode/plugin/tui"
 import { createSignal } from "solid-js"
+
+function betweenSiblings(render) {
+  const parent = createElement("box")
+  setProp(parent, "flexDirection", "column")
+  setProp(parent, "gap", 1)
+  for (const child of ["BEFORE", render, "AFTER"]) {
+    if (typeof child === "function") insert(parent, child, null)
+    else {
+      const text = createElement("text")
+      setProp(text, "content", child)
+      insert(parent, text)
+    }
+  }
+  return parent
+}
+
+function expectCollapsed(setup) {
+  expect(setup.captureCharFrame().split("\n").map((line) => line.trimEnd()).join("\n").trim()).toBe("BEFORE\n\nAFTER")
+}
 
 // This test uses browser conditions for Solid, not for the Node ws client.
 const wsRuntime = await import(
@@ -143,8 +162,16 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
       options: { compact: true },
       ui: {
         slot: (entry) => {
-          slots.set(entry.append, entry.render)
-          return () => slots.delete(entry.append)
+          const name = entry.prepend ?? entry.append
+          if (name === "sidebar.content") {
+            expect(entry.prepend).toBe(name)
+            expect(entry.append).toBeUndefined()
+          } else {
+            expect(entry.append).toBe("prompt.footer.status")
+            expect(entry.prepend).toBeUndefined()
+          }
+          slots.set(name, entry.render)
+          return () => slots.delete(name)
         },
         model: { current: () => undefined },
         toast: {
@@ -168,9 +195,10 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     }
     cleanup = await plugin.setup(api)
     expect([...slots.keys()]).toEqual(["sidebar.content", "prompt.footer.status"])
-    setup = await testRender(() => slots.get("sidebar.content")({ sessionID: "test" }), { width: 42, height: 5 })
+    setup = await testRender(() => betweenSiblings(() => slots.get("sidebar.content")({ sessionID: "test" })), { width: 42, height: 10 })
     await setup.renderOnce()
     expect(setup.captureCharFrame()).not.toContain("Codex Usage")
+    expectCollapsed(setup)
     capture("other-provider")
     expect(reads).toBe(0)
     const refresh = () => {
@@ -220,6 +248,7 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     setMessages([{ type: "assistant", model: { providerID: "other" } }])
     await setup.renderOnce()
     expect(setup.captureCharFrame()).not.toContain("Codex Usage")
+    expectCollapsed(setup)
     const before = reads
     refresh()
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -241,10 +270,10 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
 
     api.options.compact = false
     const beforeWide = reads
-    setup = await testRender(() => slots.get("prompt.footer.status")({ sessionID: "test" }), { width: 160, height: 3 })
+    setup = await testRender(() => betweenSiblings(() => slots.get("prompt.footer.status")({ sessionID: "test" })), { width: 160, height: 7 })
     await setup.renderOnce()
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(setup.captureCharFrame().trim()).toBe("")
+    expectCollapsed(setup)
     expect(reads).toBe(beforeWide)
     capture("wide-footer-hidden")
     setup.renderer.destroy()
@@ -266,9 +295,9 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     setup = undefined
     expect(listeners.size).toBe(0)
 
-    setup = await testRender(() => slots.get("prompt.footer.status")({}), { width: 80, height: 3 })
+    setup = await testRender(() => betweenSiblings(() => slots.get("prompt.footer.status")({})), { width: 80, height: 7 })
     await setup.renderOnce()
-    expect(setup.captureCharFrame().trim()).toBe("")
+    expectCollapsed(setup)
     setup.renderer.destroy()
     setup = undefined
     expect(listeners.size).toBe(0)
