@@ -6,7 +6,7 @@ import { delimiter, join } from "node:path"
 import { createInterface, type Interface as ReadlineInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import { Clock, Context, Effect, Layer, Predicate, Schema, Semaphore } from "effect"
-// Bun substitutes the "ws" specifier with its native client, which ignores createConnection.
+// Keep the Node client available without Bun substituting its native "ws" shim.
 import WebSocket from "codex-websocket"
 import { Logger } from "./logger.ts"
 import { Usage } from "./usage.ts"
@@ -16,52 +16,40 @@ const packageJson = createRequire(import.meta.url)("../package.json") as { versi
 export type RequestId = typeof RequestId.Type
 export const RequestId = Schema.Union([Schema.String, Schema.Number])
 
-export class CommandMissingError extends Schema.TaggedErrorClass<CommandMissingError>()(
-  "CodexService.CommandMissingError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class CommandMissingError extends Schema.TaggedError<CommandMissingError>()("CodexService.CommandMissingError", {
+  message: Schema.String,
+}) {}
 
-export class ServerStartError extends Schema.TaggedErrorClass<ServerStartError>()("CodexService.ServerStartError", {
+export class ServerStartError extends Schema.TaggedError<ServerStartError>()("CodexService.ServerStartError", {
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-export class TransportError extends Schema.TaggedErrorClass<TransportError>()("CodexService.TransportError", {
+export class TransportError extends Schema.TaggedError<TransportError>()("CodexService.TransportError", {
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-export class RequestTimeoutError extends Schema.TaggedErrorClass<RequestTimeoutError>()(
-  "CodexService.RequestTimeoutError",
-  {
-    id: RequestId,
-    method: Schema.String,
-    timeoutMs: Schema.Number,
-    message: Schema.String,
-  },
-) {}
-
-export class ProtocolParseError extends Schema.TaggedErrorClass<ProtocolParseError>()(
-  "CodexService.ProtocolParseError",
-  {
-    message: Schema.String,
-    line: Schema.String,
-    cause: Schema.optionalKey(Schema.Defect()),
-  },
-) {}
-
-export class ProtocolError extends Schema.TaggedErrorClass<ProtocolError>()("CodexService.ProtocolError", {
+export class RequestTimeoutError extends Schema.TaggedError<RequestTimeoutError>()("CodexService.RequestTimeoutError", {
+  id: RequestId,
+  method: Schema.String,
+  timeoutMs: Schema.Number,
   message: Schema.String,
 }) {}
 
-export class InvalidPayloadError extends Schema.TaggedErrorClass<InvalidPayloadError>()(
-  "CodexService.InvalidPayloadError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class ProtocolParseError extends Schema.TaggedError<ProtocolParseError>()("CodexService.ProtocolParseError", {
+  message: Schema.String,
+  line: Schema.String,
+  cause: Schema.optionalKey(Schema.Defect()),
+}) {}
+
+export class ProtocolError extends Schema.TaggedError<ProtocolError>()("CodexService.ProtocolError", {
+  message: Schema.String,
+}) {}
+
+export class InvalidPayloadError extends Schema.TaggedError<InvalidPayloadError>()("CodexService.InvalidPayloadError", {
+  message: Schema.String,
+}) {}
 
 export type Error =
   | CommandMissingError
@@ -274,7 +262,11 @@ export const layer = (options: Options = {}) =>
       })
 
       const startSocketTransport = Effect.fn("CodexService.startSocketTransport")(function* () {
-        const socket = new WebSocket("ws://localhost/", {
+        // Bun ignores createConnection in both its native client and node:http.
+        // Its native ws shim supports an explicit Unix URL instead.
+        const isBun = typeof process.versions.bun === "string"
+        const Client: typeof WebSocket = isBun ? createRequire(import.meta.url)("ws") : WebSocket
+        const socket = new Client(isBun ? `ws+unix://${socketPath}` : "ws://localhost/", {
           createConnection: () => createConnection(socketPath),
           perMessageDeflate: false,
         })
@@ -293,7 +285,16 @@ export const layer = (options: Options = {}) =>
             socket.off("open", onOpen)
             socket.off("error", onError)
           })
-        }).pipe(Effect.onError(() => Effect.sync(() => socket.terminate())))
+        }).pipe(
+          Effect.onError(() =>
+            Effect.sync(() => {
+              // Terminating an incomplete handshake can emit a later error after
+              // the callback cleanup has removed its temporary error listener.
+              socket.on("error", () => undefined)
+              socket.terminate()
+            }),
+          ),
+        )
 
         const state: TransportState = {
           kind: "socket",
@@ -610,7 +611,10 @@ function canConnectToSocket(socketPath: string): Effect.Effect<boolean> {
     const done = (connected: boolean) => {
       if (settled) return
       settled = true
-      socket?.removeAllListeners()
+      socket?.removeAllListeners("connect")
+      socket?.removeAllListeners("timeout")
+      // A pending connect may emit an error after cancellation destroys the socket.
+      // Keep its error handler until then so the CLI does not receive an unhandled error.
       socket?.destroy()
       resume(Effect.succeed(connected))
     }

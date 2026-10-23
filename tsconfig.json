@@ -11,9 +11,9 @@
     "noUnusedLocals": true,
     "skipLibCheck": true,
     "incremental": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/solid",
     "verbatimModuleSyntax": true,
     "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
@@ -25,5 +25,5 @@
       }
     ]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

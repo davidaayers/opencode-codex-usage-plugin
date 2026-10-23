@@ -1,4 +1,4 @@
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { Context as TuiPluginApi } from "@opencode/plugin/tui/context"
 import { Array, Layer, Logger as EffectLogger, Predicate, References, type LogLevel } from "effect"
 
 type Level = "debug" | "info" | "warn" | "error"
@@ -16,15 +16,9 @@ export const layer = (api: TuiPluginApi) => {
   const logger = EffectLogger.make((options) => {
     const [message, extra] = Array.ensure(options.message)
 
-    void api.client.app
-      .log({
-        directory: api.state.path.directory,
-        service: "opencode-codex-usage-plugin",
-        level: levels[options.logLevel] ?? "info",
-        message: String(message),
-        extra: Predicate.isObject(extra) ? extra : {},
-      })
-      .catch(() => undefined)
+    // V2 has no app.log endpoint. Keep diagnostics in the CLI's console log.
+    const level = levels[options.logLevel] ?? "info"
+    console[level]("opencode-codex-usage-plugin", String(message), Predicate.isObject(extra) ? extra : {})
   })
 
   return EffectLogger.layer([logger]).pipe(Layer.merge(Layer.succeed(References.MinimumLogLevel, "Debug")))

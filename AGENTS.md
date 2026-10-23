@@ -74,7 +74,7 @@ Use these rules when writing Effect code.
 
 - Use `Schema.Class` for multi-field data.
 - Use branded schemas (`Schema.brand`) for single-value types.
-- Use `Schema.TaggedErrorClass` for typed errors.
+- Use `Schema.TaggedError` for typed errors with the host's Effect 4.0.1.
 - Use `Schema.Defect` instead of `unknown` for defect-like causes.
 - In `Effect.gen` / `Effect.fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
 
@@ -98,6 +98,12 @@ The OpenCode repository at `~/.local/share/opencode/repos/github.com/anomalyco/o
 
 # OpenCode plugin rules
 
-- For plugin diagnostics, use the OpenCode SDK client exposed by the plugin API: `client.app.log({ service, level, message, extra })`.
+- V2 CLI plugin shape: default export `Plugin.define({ id, setup })` from `@opencode/plugin/tui`. Source is `src/tui.tsx`; load from global `cli.json`, never server config. Use `api.data`, `api.ui.slot`, and `api.theme.text`.
+- Keep line 1 of every `.tsx` file `/** @jsxImportSource @opentui/solid */`. Use Solid JSX and reactive property reads, never React hooks or destructured reactive props. Every falsifiable `<Show>` in a box slot needs an element fallback; slots always return an element.
+- `pnpm check` runs typecheck, Vitest unit tests, and the fresh packed-consumer render/update/error/gating/cleanup test. Packed UI tests use the real host Effect runtime with an injected CodexService fixture; the separate Bun transport regression uses an isolated socket.
+- `pnpm build` Solid-transforms `src/tui.tsx` into `dist/tui.js` and generates an ignored root `tui.js` bridge for OpenCode 2.1.3 local-directory loading. Both files are atomically replaced; never commit generated output. npm publishes only `dist` through the sole `./tui` export. Do not also load a global discovery wrapper.
+- V2 no longer exposes `client.app.log`; CLI diagnostics use `console.debug/info/warn/error`.
+- The Codex transport uses OpenCode's host `effect@4.0.1` runtime. Keep Effect in `devDependencies` and external to the bundle; never ship a private runtime. Tests use `@effect/vitest@4.0.1` with Vitest 5. The packed test supplies host Effect to a fresh dependency-free consumer.
+- Keep `codex-websocket` (the Node `ws` alias) in `devDependencies` and bundled. Under Bun, use its native `ws` client with an explicit Unix URL: both its native client and `node:http` ignore `createConnection`. The Node client is the only allowed bundled third-party package; the packed test guards host runtime imports and verifies actual Bun Unix WebSocket reuse.
 - OpenCode server logs are written under `~/.local/share/opencode/log/opencode.log`.
-- Debug-level plugin logs require OpenCode `logLevel: "DEBUG"` or `OPENCODE_LOG_LEVEL=DEBUG`; the desktop app's `Export Logs...` action includes server logs.
+- Start OpenCode with `OPENCODE_LOG_LEVEL=DEBUG` for diagnostic logging; `logLevel` is not a supported V2 configuration field.

@@ -14,7 +14,8 @@
   ],
   "packages": {
     ".": {
-      "release-type": "node"
+      "release-type": "node",
+      "release-as": "1.0.0"
     }
   }
 }
