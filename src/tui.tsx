@@ -51,7 +51,7 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
   const { state, isOpenAI } = createUsagePolling(props)
 
   return (
-    <box>
+    <box visible={isOpenAI()}>
       <Show when={isOpenAI()} fallback={<box />}>
         <UsageBlock state={state} theme={theme} />
       </Show>
@@ -73,7 +73,7 @@ function CompactView(props: { api: TuiPluginApi; session_id: string; runtime: Ru
     enabled: sidebarHidden,
   })
   return (
-    <box>
+    <box visible={isOpenAI() && sidebarHidden()}>
       <Show when={isOpenAI() && sidebarHidden()} fallback={<box />}>
         <text fg={theme().textMuted}>{compactUsageText(state())}</text>
       </Show>
@@ -373,7 +373,7 @@ export default Plugin.define({
     }
 
     const sidebar = api.ui.slot({
-      append: "sidebar.content",
+      prepend: "sidebar.content",
       render(props) {
         return <View api={api} session_id={props.sessionID} runtime={runtime} onMissingCodex={warnMissingCodex} />
       },
@@ -382,11 +382,9 @@ export default Plugin.define({
       append: "prompt.footer.status",
       render(props) {
         return (
-          <box>
-            <Show when={props.sessionID} fallback={<box />}>
-              {(id) => <CompactView api={api} session_id={id()} runtime={runtime} onMissingCodex={warnMissingCodex} />}
-            </Show>
-          </box>
+          <Show when={props.sessionID} fallback={<box visible={false} />}>
+            {(id) => <CompactView api={api} session_id={id()} runtime={runtime} onMissingCodex={warnMissingCodex} />}
+          </Show>
         )
       },
     })
