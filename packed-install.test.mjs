@@ -46,7 +46,7 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     expect(pkg.dependencies).toBeUndefined()
     expect(existsSync(join(consumer, "node_modules/effect"))).toBe(false)
     expect(pkg.exports).toEqual({ "./tui": "./dist/tui.js" })
-    expect(pkg.engines.opencode).toBe(">=2.1.3")
+    expect(pkg.engines.opencode).toBe(">=2.1.3 <3")
     expect(packed[0].files.filter((file) => file.path.startsWith("dist/")).map((file) => file.path)).toEqual([
       "dist/tui.js",
     ])
