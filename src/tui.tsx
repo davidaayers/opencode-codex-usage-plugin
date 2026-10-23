@@ -1,17 +1,9 @@
-import type { Plugin } from "@opencode/plugin/tui"
+/** @jsxImportSource @opentui/solid */
+import { Plugin } from "@opencode/plugin/tui"
 import type { Context as TuiPluginApi } from "@opencode/plugin/tui/context"
-import type { JSX } from "@opentui/solid"
-import {
-  createComponent,
-  createElement,
-  createTextNode,
-  effect,
-  insert,
-  insertNode,
-  setProp,
-  useTerminalDimensions,
-} from "@opentui/solid"
-import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
 import { Effect, Layer, ManagedRuntime, Option, Predicate, Schema } from "effect"
 import { CodexService } from "./codex.ts"
 import { Logger } from "./logger.js"
@@ -58,11 +50,13 @@ function View(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; 
   const theme = () => themePalette(props.api)
   const { state, isOpenAI } = createUsagePolling(props)
 
-  const root = createElement("box")
-
-  insert(root, () => (isOpenAI() ? UsageBlock({ state, theme }) : null), null)
-
-  return root
+  return (
+    <box>
+      <Show when={isOpenAI()} fallback={<box />}>
+        <UsageBlock state={state} theme={theme} />
+      </Show>
+    </box>
+  )
 }
 
 function CompactView(props: { api: TuiPluginApi; session_id: string; runtime: Runtime; onMissingCodex: () => void }) {
@@ -78,11 +72,13 @@ function CompactView(props: { api: TuiPluginApi; session_id: string; runtime: Ru
     onMissingCodex: props.onMissingCodex,
     enabled: sidebarHidden,
   })
-  const root = createElement("box")
-
-  insert(root, () => (isOpenAI() && sidebarHidden() ? CompactUsageLine({ state, theme }) : null), null)
-
-  return root
+  return (
+    <box>
+      <Show when={isOpenAI() && sidebarHidden()} fallback={<box />}>
+        <text fg={theme().textMuted}>{compactUsageText(state())}</text>
+      </Show>
+    </box>
+  )
 }
 
 function createUsagePolling(props: {
@@ -202,104 +198,60 @@ function createUsagePolling(props: {
 }
 
 function UsageBlock(props: { state: () => UsageState; theme: () => TuiTheme }) {
-  const root = createElement("box")
-  const title = createElement("text")
-  const bold = createElement("b")
-
-  insertNode(root, title)
-  insertNode(title, bold)
-  insertNode(bold, createTextNode("Codex Usage"))
-  effect(() => setProp(title, "fg", props.theme().text))
-
-  insert(
-    root,
-    () => {
-      const state = props.state()
-
-      switch (state.status) {
-        case "ready":
-          return UsageGauges(state.usage, props.theme)
-        case "error":
-          return textLine(
-            () => props.state().message,
-            () => props.theme().warning,
-          )
-        case "loading":
-          return textLine(
-            () => "Loading...",
-            () => props.theme().textMuted,
-          )
-      }
-    },
-    null,
+  const usage = () => props.state().usage
+  return (
+    <box flexDirection="column">
+      <text fg={props.theme().text} attributes={TextAttributes.BOLD}>
+        {"Codex Usage"}
+      </text>
+      <Show
+        when={usage()}
+        fallback={
+          <text fg={props.state().status === "error" ? props.theme().warning : props.theme().textMuted}>
+            {props.state().status === "error" ? props.state().message : "Loading..."}
+          </text>
+        }
+      >
+        {(current) => <UsageGauges usage={current()} theme={props.theme} />}
+      </Show>
+    </box>
   )
-
-  return root
 }
 
-function textLine(text: () => string, color: () => TuiColor) {
-  const line = createElement("text")
-
-  insert(line, text)
-  effect(() => setProp(line, "fg", color()))
-
-  return line
+function UsageGauges(props: { usage: Usage.CodexUsage; theme: () => TuiTheme }) {
+  const width = () => (props.usage.fiveHour ? GAUGE_WIDTH : EXPANDED_GAUGE_WIDTH)
+  const windows = createMemo(() =>
+    [
+      { label: "5h", window: props.usage.fiveHour },
+      { label: "week", window: props.usage.weekly },
+    ].filter((entry): entry is { label: string; window: Usage.UsageWindow } => entry.window !== null),
+  )
+  return (
+    <box>
+      <box flexDirection="row" columnGap={1}>
+        <For each={windows()} fallback={<box />}>
+          {(entry) => <UsageGauge label={entry.label} window={entry.window} theme={props.theme} width={width()} />}
+        </For>
+      </box>
+    </box>
+  )
 }
 
-function UsageGauges(usage: Usage.CodexUsage, theme: () => TuiTheme) {
-  const root = createElement("box")
-  const row = createElement("box")
-  const gaugeWidth = usage.fiveHour ? GAUGE_WIDTH : EXPANDED_GAUGE_WIDTH
-  setProp(row, "flexDirection", "row")
-  setProp(row, "columnGap", 1)
-  insertNode(root, row)
-  if (usage.fiveHour) insertNode(row, UsageGauge("5h", usage.fiveHour, theme, gaugeWidth))
-  if (usage.weekly) insertNode(row, UsageGauge("week", usage.weekly, theme, gaugeWidth))
-  return root
-}
-
-function UsageGauge(label: string, window: Usage.UsageWindow | null, theme: () => TuiTheme, width: number) {
-  const root = createElement("box")
-  const barLine = createElement("box")
-  const detailLine = createElement("box")
-  setProp(root, "flexDirection", "column")
-  setProp(barLine, "flexDirection", "row")
-  setProp(detailLine, "flexDirection", "row")
-
-  const labelText = createElement("text")
-  insertNode(labelText, createTextNode(`${label} `))
-  effect(() => setProp(labelText, "fg", theme().textMuted))
-
-  const fillText = createElement("text")
-  const trackText = createElement("text")
-  const percentText = createElement("text")
-  const resetText = createElement("text")
-  insert(fillText, () => usageGauge(window?.usedPercent ?? 0, width).fill)
-  insert(trackText, () => usageGauge(window?.usedPercent ?? 0, width).track)
-  insert(percentText, () => (window ? Usage.formatPercent(window.usedPercent) : "--"))
-  insert(resetText, () => (window ? ` · ${shortReset(window.resetsAt)}` : ""))
-  effect(() => {
-    const color = window ? levelColor(window.usedPercent, theme()) : theme().textMuted
-    setProp(fillText, "fg", color)
-    setProp(percentText, "fg", color)
-    setProp(trackText, "fg", theme().textMuted)
-    setProp(resetText, "fg", theme().textMuted)
-  })
-
-  insertNode(barLine, labelText)
-  insertNode(barLine, fillText)
-  insertNode(barLine, trackText)
-  insertNode(detailLine, percentText)
-  insertNode(detailLine, resetText)
-  insertNode(root, barLine)
-  insertNode(root, detailLine)
-  return root
-}
-
-function CompactUsageLine(props: { state: () => UsageState; theme: () => TuiTheme }) {
-  return textLine(
-    () => compactUsageText(props.state()),
-    () => props.theme().textMuted,
+function UsageGauge(props: { label: string; window: Usage.UsageWindow; theme: () => TuiTheme; width: number }) {
+  const bar = () => usageGauge(props.window.usedPercent, props.width)
+  const color = () => levelColor(props.window.usedPercent, props.theme())
+  return (
+    <box flexDirection="column">
+      <box flexDirection="row">
+        <text fg={props.theme().textMuted}>{`${props.label} `}</text>
+        <text fg={color()}>{bar().fill}</text>
+        <text fg={props.theme().textMuted}>{bar().track}</text>
+      </box>
+      <box flexDirection="row">
+        <text fg={color()}>{Usage.formatPercent(props.window.usedPercent)}</text>
+        <text fg={props.theme().textMuted}>{` · ${shortReset(props.window.resetsAt)}`}</text>
+      </box>
+    </box>
   )
 }
 
@@ -403,7 +355,7 @@ function errorMessage(error: unknown): string {
   return "Usage unavailable"
 }
 
-const plugin = {
+export default Plugin.define({
   id: "opencode-codex-usage",
   setup: async (api) => {
     const runtime = createRuntime(api)
@@ -423,38 +375,19 @@ const plugin = {
     const sidebar = api.ui.slot({
       append: "sidebar.content",
       render(props) {
-        const view = createComponent(View, {
-          api,
-          get session_id() {
-            return props.sessionID
-          },
-          runtime,
-          onMissingCodex: warnMissingCodex,
-        })
-
-        // OpenTUI's runtime primitives return renderables, while the slot API is typed through Solid's JSX facade.
-        return view as unknown as JSX.Element
+        return <View api={api} session_id={props.sessionID} runtime={runtime} onMissingCodex={warnMissingCodex} />
       },
     })
     const compact = api.ui.slot({
       append: "prompt.footer.status",
       render(props) {
-        const root = createElement("box")
-        insert(
-          root,
-          () => {
-            const sessionID = props.sessionID
-            if (!sessionID) return null
-            return createComponent(CompactView, {
-              api,
-              session_id: sessionID,
-              runtime,
-              onMissingCodex: warnMissingCodex,
-            })
-          },
-          null,
+        return (
+          <box>
+            <Show when={props.sessionID} fallback={<box />}>
+              {(id) => <CompactView api={api} session_id={id()} runtime={runtime} onMissingCodex={warnMissingCodex} />}
+            </Show>
+          </box>
         )
-        return root as unknown as JSX.Element
       },
     })
     return () => {
@@ -463,6 +396,4 @@ const plugin = {
       return runtime.dispose()
     }
   },
-} satisfies Plugin.Definition
-
-export default plugin
+})

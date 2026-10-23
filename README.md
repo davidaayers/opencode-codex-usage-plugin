@@ -43,13 +43,13 @@ Run `pnpm install && pnpm build`, then load the compiled entrypoint from the glo
 // ~/.config/opencode/cli.json
 {
   "$schema": "https://opencode.ai/v2/cli.json",
-  "plugins": ["file:///absolute/path/to/opencode-codex-usage-plugin/dist/tui.js"],
+  "plugins": ["/absolute/path/to/opencode-codex-usage-plugin"],
 }
 ```
 
 ## Requirements
 
-V2 does not expose the user's sidebar visibility preference to plugins. On wide terminals with a manually hidden sidebar, use `{ "package": "…/dist/tui.js", "options": { "compact": true } }` in `plugins` to keep the compact footer visible.
+V2 does not expose the user's sidebar visibility preference to plugins. On wide terminals with a manually hidden sidebar, use `{ "package": "/absolute/path/to/opencode-codex-usage-plugin", "options": { "compact": true } }` in `plugins` to keep the compact footer visible.
 
 Install either **Codex App** or the **Codex CLI**. The plugin looks for Codex in common locations and on your `PATH`.
 
@@ -62,21 +62,19 @@ export OPENCODE_CODEX_USAGE_COMMAND="/path/to/codex"
 ## How It Works
 
 - **Usage source**: the Codex app-server provides normalized 5-hour and weekly rate-limit windows.
-- **Rendering**: the plugin uses OpenTUI and the active OpenCode theme, with the gauge renderer kept separate from the Codex transport.
+- **Rendering**: Solid JSX uses OpenTUI and the active OpenCode theme, with the gauge renderer kept separate from the Codex transport.
 - **Lifecycle**: the Effect-based service reuses or starts a shared Codex app-server over a Unix socket, connects with WebSocket, and falls back to a dedicated stdio server when the shared path is unavailable. It owns request timeouts and connection cleanup.
 - **Runtime**: OpenCode supplies Effect 4.0.1 and the shared renderer; the plugin does not bundle or install its own runtime copies.
 
 ## Development
 
 ```sh
-pnpm install
-pnpm typecheck
-pnpm test
-pnpm test:pack
+pnpm install --frozen-lockfile
+pnpm check
 pnpm build
 ```
 
-The published plugin entrypoint is [`dist/tui.js`](dist/tui.js), generated from [`src/tui.ts`](src/tui.ts).
+The sole published export `./tui` points to `dist/tui.js`, Solid-transformed from `src/tui.tsx`. The build also generates an ignored root `tui.js` re-export for OpenCode 2.1.3's local-directory resolver; only `dist` is published. Keep renderer, Solid, plugin API, and Effect imports external and output unminified for the host loader. Generated files are replaced atomically; never hand-edit or commit them, and do not load a discovery wrapper alongside the direct package entry.
 
 ## Roadmap
 

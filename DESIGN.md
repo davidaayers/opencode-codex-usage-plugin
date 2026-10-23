@@ -19,7 +19,7 @@ implementation changes are made.
 - Make the compact indicator reflect the more constrained available window.
 - Preserve the existing Codex app-server transport, fallback behavior, typed
   response mapping, diagnostics, and lifecycle cleanup.
-- Keep the plugin TUI-only and installable through `tui.json`.
+- Keep the plugin TUI-only and installable through global `cli.json`.
 - Add tests for formatting, gauge boundaries, usage mapping, and relevant UI
   state transitions.
 
@@ -98,11 +98,11 @@ zeroes. Diagnostics should continue to use OpenCode's application logger.
 - `src/codex.ts`: transport/service changes only if required by shared polling or
   lifecycle cleanup.
 - `src/usage.ts`: normalized data and formatting helpers where appropriate.
-- `src/tui.ts`: gauge rendering, responsive placement, shared polling state, and
+- `src/tui.tsx`: gauge rendering, responsive placement, shared polling state, and
   prompt compact mode.
 - Tests should prefer pure helper tests for formatting and deterministic
   service tests for protocol behavior.
-- The package remains a TUI plugin loaded from `tui.json`, not the server-side
+- The package remains a TUI plugin loaded from global `cli.json`, not the server-side
   `opencode.json` plugin array.
 
 ## Acceptance criteria

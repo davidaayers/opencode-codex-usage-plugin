@@ -24,26 +24,22 @@
   ],
   "type": "module",
   "exports": {
-    "./tui": {
-      "types": "./dist/tui.d.ts",
-      "import": "./dist/tui.js",
-      "default": "./dist/tui.js"
-    }
+    "./tui": "./dist/tui.js"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "pnpm clean && tsc -p tsconfig.build.json && bun build.mjs",
-    "clean": "rm -rf dist",
+    "build": "bun build.mjs",
     "format": "oxfmt . --write",
     "format:check": "oxfmt . --check",
-    "prepack": "pnpm build",
+    "prepack": "bun build.mjs",
     "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build",
     "prepare": "effect-language-service patch",
     "test": "vitest run src",
     "test:pack": "bun test --conditions=browser packed-install.test.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test && pnpm test:pack"
   },
   "devDependencies": {
     "@effect/language-service": "0.86.2",

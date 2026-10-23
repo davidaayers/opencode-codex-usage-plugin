@@ -98,7 +98,10 @@ The OpenCode repository at `~/.local/share/opencode/repos/github.com/anomalyco/o
 
 # OpenCode plugin rules
 
-- V2 CLI plugin shape: `{ id, setup }` satisfying `Plugin.Definition` from `@opencode/plugin/tui`. Load from global `cli.json`; use `api.data`, `api.ui.slot`, and `api.theme.text`.
+- V2 CLI plugin shape: default export `Plugin.define({ id, setup })` from `@opencode/plugin/tui`. Source is `src/tui.tsx`; load from global `cli.json`, never server config. Use `api.data`, `api.ui.slot`, and `api.theme.text`.
+- Keep line 1 of every `.tsx` file `/** @jsxImportSource @opentui/solid */`. Use Solid JSX and reactive property reads, never React hooks or destructured reactive props. Every falsifiable `<Show>` in a box slot needs an element fallback; slots always return an element.
+- `pnpm check` runs typecheck, Vitest unit tests, and the fresh packed-consumer render/update/error/gating/cleanup test. Packed UI tests use the real host Effect runtime with an injected CodexService fixture; the separate Bun transport regression uses an isolated socket.
+- `pnpm build` Solid-transforms `src/tui.tsx` into `dist/tui.js` and generates an ignored root `tui.js` bridge for OpenCode 2.1.3 local-directory loading. Both files are atomically replaced; never commit generated output. npm publishes only `dist` through the sole `./tui` export. Do not also load a global discovery wrapper.
 - V2 no longer exposes `client.app.log`; CLI diagnostics use `console.debug/info/warn/error`.
 - The Codex transport uses OpenCode's host `effect@4.0.1` runtime. Keep Effect in `devDependencies` and external to the bundle; never ship a private runtime. Tests use `@effect/vitest@4.0.1` with Vitest 5. The packed test supplies host Effect to a fresh dependency-free consumer.
 - OpenCode server logs are written under `~/.local/share/opencode/log/opencode.log`.
