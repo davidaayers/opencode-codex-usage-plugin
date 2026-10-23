@@ -96,6 +96,7 @@ The compact line appears automatically on narrow terminals and in child sessions
 - **Rendering**: Solid JSX via `@opentui/solid`, registered into `sidebar.content` and `prompt.footer.status` through `@opencode/plugin/tui`. Colors come from the active OpenCode theme.
 - **Lifecycle**: the Effect-based service reuses or starts a shared Codex app-server over a Unix socket, connects with WebSocket, and falls back to a dedicated stdio server when the shared path is unavailable. It owns request timeouts and connection cleanup.
 - **Runtime**: OpenCode supplies Effect 4.0.1 and the shared renderer; the plugin does not bundle or install its own runtime copies.
+- **Transport client**: Node uses the bundled `codex-websocket` alias of `ws`; Bun uses its native client with an explicit Unix-socket URL. The Node client is not a host-provided runtime.
 
 ## Development
 

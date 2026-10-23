@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace the V1 plugin API and configuration with `Plugin.define` and global `cli.json` loading.
 - OpenCode 1.x users must pin `@davidaayers/opencode-codex-usage-plugin@0.1.2`, the last V1 release published on npm.
 
+### Fixed
+
+- Reuse the shared Unix WebSocket server under Bun using its native client, with safe cleanup after a rejected handshake.
+
 ### Changed
 
 - Convert the imperative renderer to Solid JSX with reactive updates, provider gating, compact output, and cleanup verification.

@@ -6,7 +6,7 @@ import { delimiter, join } from "node:path"
 import { createInterface, type Interface as ReadlineInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import { Clock, Context, Effect, Layer, Predicate, Schema, Semaphore } from "effect"
-// Bun substitutes the "ws" specifier with its native client, which ignores createConnection.
+// Keep the Node client available without Bun substituting its native "ws" shim.
 import WebSocket from "codex-websocket"
 import { Logger } from "./logger.ts"
 import { Usage } from "./usage.ts"
@@ -262,7 +262,11 @@ export const layer = (options: Options = {}) =>
       })
 
       const startSocketTransport = Effect.fn("CodexService.startSocketTransport")(function* () {
-        const socket = new WebSocket("ws://localhost/", {
+        // Bun ignores createConnection in both its native client and node:http.
+        // Its native ws shim supports an explicit Unix URL instead.
+        const isBun = typeof process.versions.bun === "string"
+        const Client: typeof WebSocket = isBun ? createRequire(import.meta.url)("ws") : WebSocket
+        const socket = new Client(isBun ? `ws+unix://${socketPath}` : "ws://localhost/", {
           createConnection: () => createConnection(socketPath),
           perMessageDeflate: false,
         })
@@ -281,7 +285,16 @@ export const layer = (options: Options = {}) =>
             socket.off("open", onOpen)
             socket.off("error", onError)
           })
-        }).pipe(Effect.onError(() => Effect.sync(() => socket.terminate())))
+        }).pipe(
+          Effect.onError(() =>
+            Effect.sync(() => {
+              // Terminating an incomplete handshake can emit a later error after
+              // the callback cleanup has removed its temporary error listener.
+              socket.on("error", () => undefined)
+              socket.terminate()
+            }),
+          ),
+        )
 
         const state: TransportState = {
           kind: "socket",

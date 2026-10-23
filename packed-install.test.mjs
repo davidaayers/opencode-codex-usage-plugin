@@ -2,14 +2,19 @@ import { test, expect } from "bun:test"
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
+import { createRequire } from "node:module"
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
 import * as effectRuntime from "effect"
 import * as tuiRuntime from "@opencode/plugin/tui"
 import { createSignal } from "solid-js"
-import { CodexService } from "./src/codex.ts"
+
+// This test uses browser conditions for Solid, not for the Node ws client.
+const wsRuntime = await import(
+  join(dirname(createRequire(import.meta.url).resolve("codex-websocket/package.json")), "wrapper.mjs")
+)
 
 test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime", async () => {
   const directory = mkdtempSync(join(tmpdir(), "codex-usage-pack-"))
@@ -59,8 +64,22 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     for (const hostImport of ["@opencode/plugin/tui", "@opentui/core", "@opentui/solid", "solid-js"]) {
       expect(imports.some((entry) => entry.path === hostImport)).toBe(true)
     }
-    expect(entrypoint).not.toMatch(/node_modules\/|effect\/dist\/|jsxDEV|jsx-runtime/)
-    expect(Buffer.byteLength(entrypoint)).toBeLessThan(100_000)
+    expect(entrypoint).not.toMatch(/effect\/dist\/|jsxDEV|jsx-runtime/)
+    // Bundle the aliased Node ws client while leaving Bun's native client
+    // available for explicit Unix URLs. No host runtime may be bundled.
+    // All host runtimes still stay external; no other dependency is bundled.
+    const bundledPackages = [...entrypoint.matchAll(/^\/\/ (node_modules\/\S+)/gm)].map(
+      (match) =>
+        match[1]
+          .replace(/^node_modules\//, "")
+          .split("/node_modules/")
+          .at(-1)
+          .split("/")[0],
+    )
+    expect(bundledPackages.length).toBeGreaterThan(0)
+    expect(bundledPackages.every((name) => name === "ws" || name === "codex-websocket")).toBe(true)
+    expect(imports.some((entry) => entry.path === "codex-websocket" || entry.path === "ws")).toBe(false)
+    expect(Buffer.byteLength(entrypoint)).toBeLessThan(200_000)
     // Keep the real host Effect/ManagedRuntime and renderer, but override the
     // CodexService layer by its stable key. No UI fixture contacts a real socket
     // or spawns Codex. The real transport regression below remains uninjected.
@@ -97,6 +116,7 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     ensureRuntimePluginSupport({
       additional: {
         "@opencode/plugin/tui": tuiRuntime,
+        "codex-websocket": wsRuntime,
         effect: {
           ...effectRuntime,
           ManagedRuntime: {
@@ -261,6 +281,7 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     // the user's real shared app-server. This used to emit an unhandled ENOENT.
     // Source-level Bun regression: internal transport modules are no longer
     // published as separate files by the single-bundle canonical build.
+    const { CodexService } = await import("./src/codex.ts")
     const runtime = ManagedRuntime.make(
       CodexService.layer({
         command: join(directory, "missing-codex"),
@@ -295,3 +316,128 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     rmSync(directory, { recursive: true, force: true })
   }
 }, 30_000)
+
+test("Bun transport reuses an isolated shared WebSocket server", async () => {
+  ensureRuntimePluginSupport({
+    additional: {
+      "@opencode/plugin/tui": tuiRuntime,
+      "codex-websocket": wsRuntime,
+      effect: effectRuntime,
+    },
+  })
+  const { CodexService } = await import("./src/codex.ts")
+  const directory = mkdtempSync(join(tmpdir(), "ocu-ws-"))
+  const socketPath = join(directory, "ws.sock")
+  const extensions = []
+  let connections = 0
+  let spawns = 0
+  // Bun's node:http WebSocket server shim cannot complete this handshake;
+  // use a real Unix WebSocket endpoint, not a TCP-backed mock.
+  const server = Bun.serve({
+    unix: socketPath,
+    fetch(request, server) {
+      extensions.push(request.headers.get("sec-websocket-extensions"))
+      if (server.upgrade(request)) return
+      return new Response("Expected WebSocket upgrade", { status: 400 })
+    },
+    websocket: {
+      open() {
+        connections++
+      },
+      message(socket, data) {
+        const request = JSON.parse(data.toString())
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            result:
+              request.method === "initialize"
+                ? {}
+                : {
+                    rateLimits: {
+                      primary: { usedPercent: 14, windowDurationMins: 300, resetsAt: 123 },
+                      secondary: null,
+                    },
+                  },
+          }),
+        )
+      },
+    },
+  })
+  const { Effect, ManagedRuntime } = effectRuntime
+  const makeRuntime = () =>
+    ManagedRuntime.make(
+      CodexService.layer({
+        command: join(directory, "missing-codex"),
+        socketPath,
+        timeoutMs: 500,
+        spawn: () => {
+          spawns++
+          throw new Error("Must reuse the isolated WebSocket server")
+        },
+      }),
+    )
+  const first = makeRuntime()
+  const second = makeRuntime()
+  try {
+    const readUsage = (runtime) =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const service = yield* CodexService.Service
+          return yield* service.readUsage()
+        }),
+      )
+    const usage = await Promise.all([readUsage(first), readUsage(second)])
+    expect(usage.map((value) => value.fiveHour?.usedPercent)).toEqual([14, 14])
+    expect(connections).toBe(2)
+    expect(extensions).toEqual([null, null])
+    expect(spawns).toBe(0)
+  } finally {
+    await first.dispose()
+    await second.dispose()
+    server.stop(true)
+    rmSync(directory, { recursive: true, force: true })
+  }
+}, 10_000)
+
+test("Bun handshake rejection falls back without an unhandled socket error", async () => {
+  ensureRuntimePluginSupport({
+    additional: {
+      "@opencode/plugin/tui": tuiRuntime,
+      "codex-websocket": wsRuntime,
+      effect: effectRuntime,
+    },
+  })
+  const { CodexService } = await import("./src/codex.ts")
+  const directory = mkdtempSync(join(tmpdir(), "ocu-reject-"))
+  const socketPath = join(directory, "ws.sock")
+  const server = Bun.serve({ unix: socketPath, fetch: () => new Response("Rejected", { status: 401 }) })
+  let spawns = 0
+  const { Effect, ManagedRuntime } = effectRuntime
+  const runtime = ManagedRuntime.make(
+    CodexService.layer({
+      command: join(directory, "missing-codex"),
+      socketPath,
+      timeoutMs: 100,
+      spawn: () => {
+        spawns++
+        throw new Error("Fixture stdio unavailable")
+      },
+    }),
+  )
+  try {
+    await expect(
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const service = yield* CodexService.Service
+          return yield* service.readUsage()
+        }),
+      ),
+    ).rejects.toMatchObject({ _tag: "CodexService.ServerStartError" })
+    expect(spawns).toBe(1)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  } finally {
+    await runtime.dispose()
+    server.stop(true)
+    rmSync(directory, { recursive: true, force: true })
+  }
+}, 10_000)

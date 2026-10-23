@@ -104,5 +104,6 @@ The OpenCode repository at `~/.local/share/opencode/repos/github.com/anomalyco/o
 - `pnpm build` Solid-transforms `src/tui.tsx` into `dist/tui.js` and generates an ignored root `tui.js` bridge for OpenCode 2.1.3 local-directory loading. Both files are atomically replaced; never commit generated output. npm publishes only `dist` through the sole `./tui` export. Do not also load a global discovery wrapper.
 - V2 no longer exposes `client.app.log`; CLI diagnostics use `console.debug/info/warn/error`.
 - The Codex transport uses OpenCode's host `effect@4.0.1` runtime. Keep Effect in `devDependencies` and external to the bundle; never ship a private runtime. Tests use `@effect/vitest@4.0.1` with Vitest 5. The packed test supplies host Effect to a fresh dependency-free consumer.
+- Keep `codex-websocket` (the Node `ws` alias) in `devDependencies` and bundled. Under Bun, use its native `ws` client with an explicit Unix URL: both its native client and `node:http` ignore `createConnection`. The Node client is the only allowed bundled third-party package; the packed test guards host runtime imports and verifies actual Bun Unix WebSocket reuse.
 - OpenCode server logs are written under `~/.local/share/opencode/log/opencode.log`.
 - Start OpenCode with `OPENCODE_LOG_LEVEL=DEBUG` for diagnostic logging; `logLevel` is not a supported V2 configuration field.
