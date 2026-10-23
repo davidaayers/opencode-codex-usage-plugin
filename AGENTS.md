@@ -98,6 +98,8 @@ The OpenCode repository at `~/.local/share/opencode/repos/github.com/anomalyco/o
 
 # OpenCode plugin rules
 
-- For plugin diagnostics, use the OpenCode SDK client exposed by the plugin API: `client.app.log({ service, level, message, extra })`.
+- V2 CLI plugin shape: `{ id, setup }` satisfying `Plugin.Definition` from `@opencode/plugin/tui`. Load from global `cli.json`; use `api.data`, `api.ui.slot`, and `api.theme.text`.
+- V2 no longer exposes `client.app.log`; CLI diagnostics use `console.debug/info/warn/error`.
+- The Codex transport owns an isolated Effect beta runtime. It does not exchange Effects with the V2 host. `allowedDuplicatedPackages` permits the host API's stable Effect types without upgrading the transport as part of the plugin migration.
 - OpenCode server logs are written under `~/.local/share/opencode/log/opencode.log`.
-- Debug-level plugin logs require OpenCode `logLevel: "DEBUG"` or `OPENCODE_LOG_LEVEL=DEBUG`; the desktop app's `Export Logs...` action includes server logs.
+- Start OpenCode with `OPENCODE_LOG_LEVEL=DEBUG` for diagnostic logging; `logLevel` is not a supported V2 configuration field.

@@ -15,32 +15,41 @@ This is a maintained fork of [zaniluca/opencode-codex-usage-plugin](https://gith
 - **Quota gauges** — compact eighth-block gauges for the available 5-hour and weekly Codex limits
 - **Proximity colors** — gauge and percentage use the active theme: `success` <50% → `accent` 50–74% → `warning` 75–89% → `error` ≥90%
 - **Reset countdowns** — short reset times appear beneath each available window
-- **Compact prompt line** — identifies the most constrained window when the sidebar is hidden
+- **Compact prompt line** — identifies the most constrained window on narrow terminals (or with `compact: true`)
 - **Codex App/CLI support** — reads usage through the Codex app-server protocol, sharing a WebSocket-over-Unix server across OpenCode instances
 - **Live updates** — refreshes every 60 seconds and on message/session events
 - **Silent by design** — hidden for non-Codex sessions
 
 ## Install
 
-```sh
-opencode plugin --global @davidaayers/opencode-codex-usage-plugin
+Requires OpenCode **2.1.3 or newer**. V1 plugin releases are not compatible with V2.
+
+Add the package to `~/.config/opencode/cli.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "plugins": ["@davidaayers/opencode-codex-usage-plugin"]
+}
 ```
 
-Or from inside OpenCode: press `ctrl+p` → "Install Plugin" → `@davidaayers/opencode-codex-usage-plugin`. Restart OpenCode and the gauges appear once the session uses an OpenAI/Codex model.
+Restart OpenCode after installing. The gauges appear once the session uses an OpenAI/Codex model.
 
 ### From source
 
-OpenCode TUI plugins load from the `plugin` array in **`~/.config/opencode/tui.json`** (or a project-level `tui.json`) — _not_ from `opencode.jsonc`, whose `plugin` array is server-side only.
+Run `pnpm install && pnpm build`, then load the compiled entrypoint from the global **`~/.config/opencode/cli.json`**, not the server configuration:
 
 ```jsonc
-// ~/.config/opencode/tui.json
+// ~/.config/opencode/cli.json
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["file:///absolute/path/to/opencode-codex-usage-plugin/dist/tui.js"],
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "plugins": ["file:///absolute/path/to/opencode-codex-usage-plugin/dist/tui.js"],
 }
 ```
 
 ## Requirements
+
+V2 does not expose the user's sidebar visibility preference to plugins. On wide terminals with a manually hidden sidebar, use `{ "package": "…/dist/tui.js", "options": { "compact": true } }` in `plugins` to keep the compact footer visible.
 
 Install either **Codex App** or the **Codex CLI**. The plugin looks for Codex in common locations and on your `PATH`.
 
@@ -60,8 +69,9 @@ export OPENCODE_CODEX_USAGE_COMMAND="/path/to/codex"
 
 ```sh
 pnpm install
-pnpm check
+pnpm typecheck
 pnpm test
+pnpm test:pack
 pnpm build
 ```
 

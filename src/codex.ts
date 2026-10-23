@@ -610,7 +610,10 @@ function canConnectToSocket(socketPath: string): Effect.Effect<boolean> {
     const done = (connected: boolean) => {
       if (settled) return
       settled = true
-      socket?.removeAllListeners()
+      socket?.removeAllListeners("connect")
+      socket?.removeAllListeners("timeout")
+      // A pending connect may emit an error after cancellation destroys the socket.
+      // Keep its error handler until then so the CLI does not receive an unhandled error.
       socket?.destroy()
       resume(Effect.succeed(connected))
     }
