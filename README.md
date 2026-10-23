@@ -64,6 +64,7 @@ export OPENCODE_CODEX_USAGE_COMMAND="/path/to/codex"
 - **Usage source**: the Codex app-server provides normalized 5-hour and weekly rate-limit windows.
 - **Rendering**: the plugin uses OpenTUI and the active OpenCode theme, with the gauge renderer kept separate from the Codex transport.
 - **Lifecycle**: the Effect-based service reuses or starts a shared Codex app-server over a Unix socket, connects with WebSocket, and falls back to a dedicated stdio server when the shared path is unavailable. It owns request timeouts and connection cleanup.
+- **Runtime**: OpenCode supplies Effect 4.0.1 and the shared renderer; the plugin does not bundle or install its own runtime copies.
 
 ## Development
 

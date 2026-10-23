@@ -1,11 +1,12 @@
 import { test, expect } from "bun:test"
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
+import * as effectRuntime from "effect"
 
 test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime", async () => {
   const directory = mkdtempSync(join(tmpdir(), "codex-usage-pack-"))
@@ -34,12 +35,16 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     ])
     const installed = join(consumer, "node_modules", "@davidaayers", "opencode-codex-usage-plugin")
     const pkg = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"))
-    // The real CLI rewrites bare Effect imports to its host runtime. A plain
-    // packed import does not, so explicitly guard the private runtime boundary.
+    // The fresh consumer has no private Effect installation. Supply the same
+    // host runtime for the packed plugin and the transport regression below.
+    expect(pkg.dependencies).toBeUndefined()
+    expect(existsSync(join(consumer, "node_modules/effect"))).toBe(false)
     const entrypoint = readFileSync(join(installed, pkg.exports["./tui"].import), "utf8")
     const imports = new Bun.Transpiler({ loader: "js" }).scanImports(entrypoint)
-    expect(imports.filter((entry) => entry.path === "effect" || entry.path.startsWith("effect/"))).toEqual([])
-    ensureRuntimePluginSupport()
+    expect(imports.some((entry) => entry.path === "effect")).toBe(true)
+    expect(entrypoint).not.toMatch(/node_modules\/.*effect|effect\/dist\//)
+    expect(Buffer.byteLength(entrypoint)).toBeLessThan(100_000)
+    ensureRuntimePluginSupport({ additional: { effect: effectRuntime } })
     const plugin = (await import(join(installed, pkg.exports["./tui"].import))).default
     expect(plugin.id).toBe("opencode-codex-usage")
     const slots = new Map()
@@ -89,7 +94,7 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     // Exercise Bun's delayed socket-error path with an isolated socket, never
     // the user's real shared app-server. This used to emit an unhandled ENOENT.
     const { CodexService } = await import(join(installed, "dist/codex.js"))
-    const { Effect, ManagedRuntime } = await import(join(consumer, "node_modules/effect/dist/index.js"))
+    const { Effect, ManagedRuntime } = effectRuntime
     const runtime = ManagedRuntime.make(
       CodexService.layer({
         command: join(directory, "missing-codex"),

@@ -21,8 +21,7 @@
     "types": ["node", "vitest"],
     "plugins": [
       {
-        "name": "@effect/language-service",
-        "allowedDuplicatedPackages": ["effect"]
+        "name": "@effect/language-service"
       }
     ]
   },

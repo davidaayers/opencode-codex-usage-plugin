@@ -16,52 +16,40 @@ const packageJson = createRequire(import.meta.url)("../package.json") as { versi
 export type RequestId = typeof RequestId.Type
 export const RequestId = Schema.Union([Schema.String, Schema.Number])
 
-export class CommandMissingError extends Schema.TaggedErrorClass<CommandMissingError>()(
-  "CodexService.CommandMissingError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class CommandMissingError extends Schema.TaggedError<CommandMissingError>()("CodexService.CommandMissingError", {
+  message: Schema.String,
+}) {}
 
-export class ServerStartError extends Schema.TaggedErrorClass<ServerStartError>()("CodexService.ServerStartError", {
+export class ServerStartError extends Schema.TaggedError<ServerStartError>()("CodexService.ServerStartError", {
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-export class TransportError extends Schema.TaggedErrorClass<TransportError>()("CodexService.TransportError", {
+export class TransportError extends Schema.TaggedError<TransportError>()("CodexService.TransportError", {
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
-export class RequestTimeoutError extends Schema.TaggedErrorClass<RequestTimeoutError>()(
-  "CodexService.RequestTimeoutError",
-  {
-    id: RequestId,
-    method: Schema.String,
-    timeoutMs: Schema.Number,
-    message: Schema.String,
-  },
-) {}
-
-export class ProtocolParseError extends Schema.TaggedErrorClass<ProtocolParseError>()(
-  "CodexService.ProtocolParseError",
-  {
-    message: Schema.String,
-    line: Schema.String,
-    cause: Schema.optionalKey(Schema.Defect()),
-  },
-) {}
-
-export class ProtocolError extends Schema.TaggedErrorClass<ProtocolError>()("CodexService.ProtocolError", {
+export class RequestTimeoutError extends Schema.TaggedError<RequestTimeoutError>()("CodexService.RequestTimeoutError", {
+  id: RequestId,
+  method: Schema.String,
+  timeoutMs: Schema.Number,
   message: Schema.String,
 }) {}
 
-export class InvalidPayloadError extends Schema.TaggedErrorClass<InvalidPayloadError>()(
-  "CodexService.InvalidPayloadError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class ProtocolParseError extends Schema.TaggedError<ProtocolParseError>()("CodexService.ProtocolParseError", {
+  message: Schema.String,
+  line: Schema.String,
+  cause: Schema.optionalKey(Schema.Defect()),
+}) {}
+
+export class ProtocolError extends Schema.TaggedError<ProtocolError>()("CodexService.ProtocolError", {
+  message: Schema.String,
+}) {}
+
+export class InvalidPayloadError extends Schema.TaggedError<InvalidPayloadError>()("CodexService.InvalidPayloadError", {
+  message: Schema.String,
+}) {}
 
 export type Error =
   | CommandMissingError

@@ -74,7 +74,7 @@ Use these rules when writing Effect code.
 
 - Use `Schema.Class` for multi-field data.
 - Use branded schemas (`Schema.brand`) for single-value types.
-- Use `Schema.TaggedErrorClass` for typed errors.
+- Use `Schema.TaggedError` for typed errors with the host's Effect 4.0.1.
 - Use `Schema.Defect` instead of `unknown` for defect-like causes.
 - In `Effect.gen` / `Effect.fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
 
@@ -100,6 +100,6 @@ The OpenCode repository at `~/.local/share/opencode/repos/github.com/anomalyco/o
 
 - V2 CLI plugin shape: `{ id, setup }` satisfying `Plugin.Definition` from `@opencode/plugin/tui`. Load from global `cli.json`; use `api.data`, `api.ui.slot`, and `api.theme.text`.
 - V2 no longer exposes `client.app.log`; CLI diagnostics use `console.debug/info/warn/error`.
-- The Codex transport owns an isolated Effect beta runtime. It does not exchange Effects with the V2 host. `allowedDuplicatedPackages` permits the host API's stable Effect types without upgrading the transport as part of the plugin migration.
+- The Codex transport uses OpenCode's host `effect@4.0.1` runtime. Keep Effect in `devDependencies` and external to the bundle; never ship a private runtime. Tests use `@effect/vitest@4.0.1` with Vitest 5. The packed test supplies host Effect to a fresh dependency-free consumer.
 - OpenCode server logs are written under `~/.local/share/opencode/log/opencode.log`.
 - Start OpenCode with `OPENCODE_LOG_LEVEL=DEBUG` for diagnostic logging; `logLevel` is not a supported V2 configuration field.
