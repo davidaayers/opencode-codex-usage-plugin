@@ -94,6 +94,10 @@ jobs:
         if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: pnpm install --frozen-lockfile
 
+      - name: Check release
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: pnpm check
+
       - name: Publish to npm
         if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
