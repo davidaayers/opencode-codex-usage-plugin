@@ -90,6 +90,12 @@ jobs:
         if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: corepack enable
 
+      # npm 10 runs prepare during pack --ignore-scripts, corrupting --json
+      # output in the packed-consumer test. Use the publishing npm for checks too.
+      - name: Setup npm
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: npm install --global npm@11.5.1
+
       - name: Install dependencies
         if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: pnpm install --frozen-lockfile
@@ -100,6 +106,4 @@ jobs:
 
       - name: Publish to npm
         if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
-        run: |
-          npm install --global npm@11.5.1
-          npm publish --provenance --access public
+        run: npm publish --provenance --access public
