@@ -27,8 +27,10 @@ const decodeAssistantProviderMessage = Schema.decodeUnknownOption(AssistantProvi
 
 const POLL_MS = 60_000
 const UI_TIMEOUT_MS = 15_000
-const GAUGE_WIDTH = 7
-const EXPANDED_GAUGE_WIDTH = 28
+// Match the total gauge-row allocation in the context and Go plugins.
+const LAYOUT_WIDTH = 32
+const COLUMN_GAP = 2
+const LABEL_WIDTH = 4
 const EIGHTHS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
 const OK_AT = 50
 const WARN_AT = 75
@@ -219,16 +221,16 @@ function UsageBlock(props: { state: () => UsageState; theme: () => TuiTheme }) {
 }
 
 function UsageGauges(props: { usage: Usage.CodexUsage; theme: () => TuiTheme }) {
-  const width = () => (props.usage.fiveHour ? GAUGE_WIDTH : EXPANDED_GAUGE_WIDTH)
   const windows = createMemo(() =>
     [
       { label: "5h", window: props.usage.fiveHour },
       { label: "week", window: props.usage.weekly },
     ].filter((entry): entry is { label: string; window: Usage.UsageWindow } => entry.window !== null),
   )
+  const width = () => (windows().length === 1 ? LAYOUT_WIDTH : (LAYOUT_WIDTH - COLUMN_GAP) / 2)
   return (
     <box>
-      <box flexDirection="row" columnGap={1}>
+      <box flexDirection="row" width={LAYOUT_WIDTH} columnGap={COLUMN_GAP}>
         <For each={windows()} fallback={<box />}>
           {(entry) => <UsageGauge label={entry.label} window={entry.window} theme={props.theme} width={width()} />}
         </For>
@@ -238,19 +240,27 @@ function UsageGauges(props: { usage: Usage.CodexUsage; theme: () => TuiTheme }) 
 }
 
 function UsageGauge(props: { label: string; window: Usage.UsageWindow; theme: () => TuiTheme; width: number }) {
-  const bar = () => usageGauge(props.window.usedPercent, props.width)
+  const bar = () => usageGauge(props.window.usedPercent, props.width - LABEL_WIDTH - 1)
   const color = () => levelColor(props.window.usedPercent, props.theme())
+  const percent = () => Usage.formatPercent(props.window.usedPercent)
+  const reset = () => {
+    const suffix = ` · ${shortReset(props.window.resetsAt)}`
+    const available = props.width - percent().length
+    return suffix.length > available ? `${suffix.slice(0, available - 1)}…` : suffix
+  }
   return (
-    <box flexDirection="column">
+    <box flexDirection="column" width={props.width} flexShrink={0}>
       <box flexDirection="row">
-        <text fg={props.theme().textMuted}>{`${props.label} `}</text>
-        <text fg={color()}>{bar().fill}</text>
-        <text fg={props.theme().textMuted}>{bar().track}</text>
+        <text fg={props.theme().textMuted}>{`${props.label.padEnd(LABEL_WIDTH)} `}</text>
+        <text width={props.width - LABEL_WIDTH - 1} flexShrink={0}>
+          <span style={{ fg: color() }}>{bar().fill}</span>
+          <span style={{ fg: props.theme().textMuted }}>{bar().track}</span>
+        </text>
       </box>
-      <box flexDirection="row">
-        <text fg={color()}>{Usage.formatPercent(props.window.usedPercent)}</text>
-        <text fg={props.theme().textMuted}>{` · ${shortReset(props.window.resetsAt)}`}</text>
-      </box>
+      <text width={props.width} wrapMode="none" truncate>
+        <span style={{ fg: color() }}>{percent()}</span>
+        <span style={{ fg: props.theme().textMuted }}>{reset()}</span>
+      </text>
     </box>
   )
 }

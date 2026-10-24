@@ -27,7 +27,14 @@ function betweenSiblings(render) {
 }
 
 function expectCollapsed(setup) {
-  expect(setup.captureCharFrame().split("\n").map((line) => line.trimEnd()).join("\n").trim()).toBe("BEFORE\n\nAFTER")
+  expect(
+    setup
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .join("\n")
+      .trim(),
+  ).toBe("BEFORE\n\nAFTER")
 }
 
 // This test uses browser conditions for Solid, not for the Node ws client.
@@ -44,6 +51,16 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
   const frames = {}
   const capture = (name) => {
     frames[name] = setup.captureCharFrame()
+  }
+  const expectGauge = (name, single = false) => {
+    capture(name)
+    const row = frames[name]
+      .split("\n")
+      .find((line) => line.startsWith(single ? "week " : "5h   "))
+      ?.trimEnd()
+    expect(row).toBeDefined()
+    expect(row.length).toBe(32)
+    if (!single) expect(row.slice(17, 22)).toBe("week ")
   }
   try {
     // Keep the language-service prepare hook's stdout out of npm's JSON result.
@@ -195,7 +212,10 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     }
     cleanup = await plugin.setup(api)
     expect([...slots.keys()]).toEqual(["sidebar.content", "prompt.footer.status"])
-    setup = await testRender(() => betweenSiblings(() => slots.get("sidebar.content")({ sessionID: "test" })), { width: 42, height: 10 })
+    setup = await testRender(() => betweenSiblings(() => slots.get("sidebar.content")({ sessionID: "test" })), {
+      width: 37,
+      height: 10,
+    })
     await setup.renderOnce()
     expect(setup.captureCharFrame()).not.toContain("Codex Usage")
     expectCollapsed(setup)
@@ -223,12 +243,20 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     await waitFor(() => setup.captureCharFrame().includes("81%"))
     expect(setup.captureCharFrame()).toContain("42%")
     expect(setup.captureCharFrame()).toContain("Codex Usage")
-    capture("two-gauges")
+    expectGauge("two-gauges")
     usage = { ...usage, weekly: { ...usage.weekly, usedPercent: 91 } }
     refresh()
     await waitFor(() => setup.captureCharFrame().includes("91%"))
-    capture("updated-gauges")
+    expectGauge("updated-gauges")
     expect(reads).toBeGreaterThanOrEqual(2)
+    usage = {
+      fiveHour: { label: "5h", usedPercent: 0, resetsAt: Math.floor(Date.now() / 1000) + 28 * 86_400 },
+      weekly: { label: "weekly", usedPercent: 100, resetsAt: Math.floor(Date.now() / 1000) + 1000 * 86_400 },
+    }
+    refresh()
+    await waitFor(() => setup.captureCharFrame().includes("100%"))
+    expectGauge("boundary-percent-long-reset")
+    expect(setup.captureCharFrame()).toContain("100% · 1000d")
     failure = { _tag: "CodexService.CommandMissingError", message: "Fixture Codex missing" }
     refresh()
     await waitFor(() => setup.captureCharFrame().includes("Fixture Codex missing"))
@@ -241,9 +269,9 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     usage = { fiveHour: null, weekly: { label: "weekly", usedPercent: 4, resetsAt: null } }
     refresh()
     await waitFor(() => setup.captureCharFrame().includes("4%"))
-    expect(setup.captureCharFrame()).toContain("week █▏" + "░".repeat(26))
+    expect(setup.captureCharFrame()).toContain("week █▏" + "░".repeat(25))
     expect(setup.captureCharFrame()).not.toContain("5h")
-    capture("weekly-only")
+    expectGauge("weekly-only", true)
     // The last assistant provider takes precedence over the prompt model.
     setMessages([{ type: "assistant", model: { providerID: "other" } }])
     await setup.renderOnce()
@@ -270,7 +298,10 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
 
     api.options.compact = false
     const beforeWide = reads
-    setup = await testRender(() => betweenSiblings(() => slots.get("prompt.footer.status")({ sessionID: "test" })), { width: 160, height: 7 })
+    setup = await testRender(() => betweenSiblings(() => slots.get("prompt.footer.status")({ sessionID: "test" })), {
+      width: 160,
+      height: 7,
+    })
     await setup.renderOnce()
     await new Promise((resolve) => setTimeout(resolve, 20))
     expectCollapsed(setup)
@@ -295,7 +326,10 @@ test("packed V2 Codex plugin mounts, gates providers, and disposes its runtime",
     setup = undefined
     expect(listeners.size).toBe(0)
 
-    setup = await testRender(() => betweenSiblings(() => slots.get("prompt.footer.status")({})), { width: 80, height: 7 })
+    setup = await testRender(() => betweenSiblings(() => slots.get("prompt.footer.status")({})), {
+      width: 80,
+      height: 7,
+    })
     await setup.renderOnce()
     expectCollapsed(setup)
     setup.renderer.destroy()
